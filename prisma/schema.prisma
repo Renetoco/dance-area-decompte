@@ -1,0 +1,147 @@
+// Schéma de données — voir project/specifications/specifications-fonctionnelles.md
+// pour la logique métier derrière chaque modèle.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdminRole {
+  ADMIN
+  COMPTABILITE
+  DIRECTION
+}
+
+enum DeclarationStatus {
+  DRAFT // en cours de saisie, modifiable par le prof
+  SUBMITTED_MANUAL // soumis volontairement par le prof avant la deadline
+  SUBMITTED_AUTO // verrouillé automatiquement par le cron à la deadline
+}
+
+enum ChangeType {
+  REMPLACEMENT_EFFECTUE // le prof a couvert le cours d'un·e collègue
+  ABSENCE_REMPLACEE // le prof a été absent·e, quelqu'un l'a remplacé·e
+  ABSENCE_NON_REMPLACEE
+  AUTRE
+}
+
+enum ReminderType {
+  RAPPEL_J4
+  RAPPEL_J3
+  RAPPEL_J2
+  AUTO_SOUMISSION
+}
+
+model Teacher {
+  id            String   @id @default(cuid())
+  analyticCode  String   @unique // "code analytique", ex. "3415" — clé pivot avec le fichier Excel
+  name          String
+  // Le fichier Excel source ne contient pas d'email par prof : à l'import,
+  // un Teacher est créé SANS email/mot de passe ("dans le trombinoscope,
+  // pas encore de compte"). L'admin renseigne l'email ensuite (un par un ou
+  // via un mapping code -> email) pour activer le compte et déclencher
+  // l'envoi des identifiants — voir /api/admin/teachers.
+  email         String?  @unique
+  passwordHash  String?
+  mustResetPwd  Boolean  @default(true) // force le changement de mot de passe à la 1ère connexion
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  courses       Course[]
+  declarations  MonthlyDeclaration[]
+  reminderLogs  ReminderLog[]
+  // Cas où ce prof est cité comme "autre prof" dans la ligne d'un collègue
+  citedInItems  DeclarationItem[] @relation("OtherTeacher")
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  code        String   @unique // "Code grp.", ex. "26.1050"
+  categorie   String // "Cours", ex. "Ados-Adultes 2026-2027"
+  libelle     String // texte d'origine complet, conservé pour référence
+  nomCours    String // nom du cours parsé, ex. "Afro-contemporain brésilien"
+  jour        String? // "Mardi" — absent pour les "packs" (Etudes/SAE)
+  heureDebut  String? // "20:15"
+  heureFin    String? // "21:30"
+  quota       Int?
+  active      Boolean  @default(true)
+
+  teacherId   String?
+  teacher     Teacher? @relation(fields: [teacherId], references: [id])
+
+  declarationItems DeclarationItem[]
+}
+
+model MonthlyDeclaration {
+  id             String            @id @default(cuid())
+  teacherId      String
+  teacher        Teacher           @relation(fields: [teacherId], references: [id])
+  period         String // "2026-09" = période du 1er au 20 septembre 2026
+  hasChanges     Boolean? // réponse à "y a-t-il eu des changements ?" ; null = pas encore répondu
+  status         DeclarationStatus @default(DRAFT)
+  submittedAt    DateTime?
+  reopenedAt     DateTime? // trace d'une réouverture exceptionnelle par un admin
+  reopenedBy     String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  items          DeclarationItem[]
+
+  @@unique([teacherId, period])
+  @@index([period])
+}
+
+model DeclarationItem {
+  id              String             @id @default(cuid())
+  declarationId   String
+  declaration     MonthlyDeclaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+
+  type            ChangeType
+  courseId        String?
+  course          Course?            @relation(fields: [courseId], references: [id])
+  date            DateTime?
+
+  otherTeacherId  String?
+  otherTeacher    Teacher?           @relation("OtherTeacher", fields: [otherTeacherId], references: [id])
+  otherTeacherFreeText String? // si le/la remplaçant·e n'est pas dans la liste des profs actifs
+
+  hours           Float?
+  comment         String?
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         AdminRole
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+}
+
+model ReminderLog {
+  id        String       @id @default(cuid())
+  period    String
+  teacherId String
+  teacher   Teacher      @relation(fields: [teacherId], references: [id])
+  type      ReminderType
+  sentAt    DateTime     @default(now())
+
+  @@index([period, type])
+}
+
+// Empêche le cron de tourner deux fois le même jour si Vercel le redéclenche
+model CronRun {
+  id        String   @id @default(cuid())
+  jobDate   String   @unique // "2026-09-20"
+  ranAt     DateTime @default(now())
+  summary   String?
+}
