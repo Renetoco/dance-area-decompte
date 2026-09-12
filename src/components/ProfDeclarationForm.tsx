@@ -251,7 +251,8 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
               <p style={{ fontWeight: 600, margin: 0 }}>{TYPE_LABELS[item.type]}</p>
               {item.course && (
                 <p className="muted" style={{ margin: "4px 0" }}>
-                  Cours : {item.course.nomCours} {item.course.jour ? `(${item.course.jour} ${item.course.heureDebut ?? ""})` : ""}
+                  Cours : {item.course.nomCours} ({item.course.code})
+                  {item.course.jour ? ` — ${item.course.jour} ${item.course.heureDebut ?? ""}` : ""}
                 </p>
               )}
               {item.date && <p className="muted" style={{ margin: "4px 0" }}>Date : {item.date.slice(0, 10)}</p>}
@@ -302,14 +303,14 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             <optgroup label="Vos cours">
               {bundle.myCourses.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nomCours} {c.jour ? `— ${c.jour} ${c.heureDebut ?? ""}` : ""}
+                  {c.nomCours} ({c.code}) {c.jour ? `— ${c.jour} ${c.heureDebut ?? ""}` : ""}
                 </option>
               ))}
             </optgroup>
             <optgroup label="Autres cours de l'école">
               {bundle.otherCourses.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nomCours} {c.jour ? `— ${c.jour} ${c.heureDebut ?? ""}` : ""}
+                  {c.nomCours} ({c.code}) {c.jour ? `— ${c.jour} ${c.heureDebut ?? ""}` : ""}
                 </option>
               ))}
             </optgroup>

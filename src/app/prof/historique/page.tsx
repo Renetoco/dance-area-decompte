@@ -46,7 +46,7 @@ export default async function HistoriquePage() {
           {d.items.map((item) => (
             <p key={item.id} className="muted" style={{ margin: "2px 0", fontSize: "0.85rem" }}>
               • {TYPE_LABELS[item.type]}
-              {item.course ? ` — ${item.course.nomCours}` : ""}
+              {item.course ? ` — ${item.course.nomCours} (${item.course.code})` : ""}
               {item.date ? ` — ${item.date.toISOString().slice(0, 10)}` : ""}
               {item.otherTeacher ? ` — avec ${item.otherTeacher.name}` : item.otherTeacherFreeText ? ` — avec ${item.otherTeacherFreeText}` : ""}
             </p>

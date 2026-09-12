@@ -71,6 +71,7 @@ export default async function FicheProfPage({ params }: { params: { id: string }
           <table>
             <thead>
               <tr>
+                <th>Code</th>
                 <th>Cours</th>
                 <th>Catégorie</th>
                 <th>Jour</th>
@@ -80,6 +81,7 @@ export default async function FicheProfPage({ params }: { params: { id: string }
             <tbody>
               {teacher.courses.map((c) => (
                 <tr key={c.id} className="is-clickable">
+                  <td className="muted">{c.code}</td>
                   <td>
                     <Link href={`/admin/cours/${c.id}`}>{c.nomCours}</Link>
                   </td>
@@ -100,6 +102,7 @@ export default async function FicheProfPage({ params }: { params: { id: string }
             <table>
               <thead>
                 <tr>
+                  <th>Code</th>
                   <th>Cours</th>
                   <th>Rôle</th>
                   <th>Jour</th>
@@ -109,6 +112,7 @@ export default async function FicheProfPage({ params }: { params: { id: string }
               <tbody>
                 {teacher.courseParticipations.map((p) => (
                   <tr key={p.id}>
+                    <td className="muted">{p.course.code}</td>
                     <td>
                       <Link href={`/admin/cours/${p.course.id}`}>{p.course.nomCours}</Link>
                     </td>

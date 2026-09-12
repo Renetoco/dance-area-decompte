@@ -49,6 +49,7 @@ export default function AdminCourses() {
         <table>
           <thead>
             <tr>
+              <th>Code</th>
               <th>Cours</th>
               <th>Catégorie</th>
               <th>Jour</th>
@@ -60,6 +61,7 @@ export default function AdminCourses() {
           <tbody>
             {courses.map((c) => (
               <tr key={c.id} className="is-clickable">
+                <td className="muted">{c.code}</td>
                 <td>
                   <Link href={`/admin/cours/${c.id}`}>{c.nomCours}</Link>
                 </td>

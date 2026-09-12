@@ -211,7 +211,7 @@ export default function AdminDashboard() {
                       {detail.items.map((item: any) => (
                         <div key={item.id} className="detail-item">
                           <strong>{TYPE_LABELS[item.type]}</strong>
-                          {item.course ? ` — ${item.course.nomCours}` : ""}
+                          {item.course ? ` — ${item.course.nomCours} (${item.course.code})` : ""}
                           {item.date ? ` — ${item.date.slice(0, 10)}` : ""}
                           {item.hours != null ? ` — ${item.hours}h` : ""}
                           {item.otherTeacher ? ` — avec ${item.otherTeacher.name}` : item.otherTeacherFreeText ? ` — avec ${item.otherTeacherFreeText}` : ""}
