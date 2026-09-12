@@ -3,7 +3,7 @@
  * project/contexte/regles-metier.md pour la règle en langage naturel :
  *   - période déclarée : du 1er au 20 de chaque mois
  *   - deadline : le 20 à 21h00, heure de Genève (Europe/Zurich)
- *   - rappels : J-4, J-3, J-2 (donc les 16, 17, 18) à 09h00
+ *   - rappels : J-4, J-2, J-1 (donc les 16, 18, 19) à 09h00
  *
  * On n'utilise aucune librairie de dates externe : Node embarque une base
  * de fuseaux horaires complète (Intl), ce qui suffit pour ce besoin.
@@ -12,7 +12,7 @@
 export const TIMEZONE = "Europe/Zurich";
 export const DEADLINE_DAY = 20;
 export const DEADLINE_HOUR = 21;
-export const REMINDER_OFFSETS_DAYS = [4, 3, 2] as const; // J-4, J-3, J-2
+export const REMINDER_OFFSETS_DAYS = [4, 2, 1] as const; // J-4, J-2, J-1
 export const REMINDER_HOUR = 9;
 
 /** Convertit une heure "murale" (ex. 20 septembre 2026, 21h00, à Genève) en Date UTC. */
@@ -88,7 +88,7 @@ export function getDeadline(period: string): Date {
   return zonedTimeToUtc(year, month, DEADLINE_DAY, DEADLINE_HOUR, 0);
 }
 
-/** Instants (UTC) des 3 rappels (J-4, J-3, J-2) pour une période. */
+/** Instants (UTC) des 3 rappels (J-4, J-2, J-1) pour une période. */
 export function getReminderDates(period: string): { offset: number; date: Date }[] {
   const { year, month } = periodToYearMonth(period);
   return REMINDER_OFFSETS_DAYS.map((offset) => ({

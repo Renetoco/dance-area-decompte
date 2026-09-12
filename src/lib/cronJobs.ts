@@ -49,7 +49,7 @@ async function ensureDeclarationsCreated(period: string, dateStr: string) {
   return { ran: true, created };
 }
 
-/** J-4 / J-3 / J-2 : rappel aux profs qui n'ont pas encore soumis manuellement. */
+/** J-4 / J-2 / J-1 : rappel aux profs qui n'ont pas encore soumis manuellement. */
 async function sendDueReminders(period: string, dateStr: string, offset: number) {
   const jobKey = `${dateStr}:reminder`;
   if (await alreadyRan(jobKey)) return { ran: false };
@@ -70,8 +70,8 @@ async function sendDueReminders(period: string, dateStr: string, offset: number)
   });
 
   const reminderType = (
-    { 4: "RAPPEL_J4", 3: "RAPPEL_J3", 2: "RAPPEL_J2" } as const
-  )[offset as 4 | 3 | 2];
+    { 4: "RAPPEL_J4", 2: "RAPPEL_J2", 1: "RAPPEL_J1" } as const
+  )[offset as 4 | 2 | 1];
 
   let sent = 0;
   for (const teacher of notYetSubmitted) {
@@ -157,8 +157,8 @@ export async function runDailyCronTick(now: Date = new Date()) {
 
   const reminderOffsetByDay: Record<number, number> = {
     [DEADLINE_DAY - 4]: 4,
-    [DEADLINE_DAY - 3]: 3,
     [DEADLINE_DAY - 2]: 2,
+    [DEADLINE_DAY - 1]: 1,
   };
   if (day in reminderOffsetByDay && hour >= REMINDER_HOUR) {
     results.reminder = await sendDueReminders(period, dateStr, reminderOffsetByDay[day]);

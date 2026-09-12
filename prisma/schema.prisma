@@ -31,8 +31,9 @@ enum ChangeType {
 
 enum ReminderType {
   RAPPEL_J4
-  RAPPEL_J3
+  RAPPEL_J3 // conservé pour l'historique ; plus généré depuis le passage à J-4/J-2/J-1
   RAPPEL_J2
+  RAPPEL_J1
   AUTO_SOUMISSION
 }
 
