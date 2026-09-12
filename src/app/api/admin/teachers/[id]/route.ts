@@ -48,7 +48,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const teacher = await prisma.teacher.findUnique({ where: { id: params.id } });
   if (!teacher) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
 
-  const { email, active, role } = await req.json();
+  const { email, active, role, tempPassword: customTempPassword } = await req.json();
   const data: {
     email?: string;
     active?: boolean;
@@ -65,8 +65,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const normalizedEmail = String(email).trim().toLowerCase();
     data.email = normalizedEmail;
     if (!teacher.passwordHash) {
-      // Première activation du compte : on génère un mot de passe temporaire.
-      tempPassword = generateTempPassword();
+      // Première activation du compte : on génère un mot de passe temporaire
+      // (ou on utilise celui fourni, ex. pour communiquer des identifiants
+      // de démo directement).
+      tempPassword =
+        typeof customTempPassword === "string" && customTempPassword.trim().length >= 6
+          ? customTempPassword.trim()
+          : generateTempPassword();
       data.passwordHash = await hashPassword(tempPassword);
       data.mustResetPwd = true;
     }
@@ -78,13 +83,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     select: { id: true, analyticCode: true, name: true, email: true, active: true, mustResetPwd: true, role: true },
   });
 
+  let emailSent: boolean | undefined;
   if (tempPassword && updated.email) {
+    emailSent = true;
     try {
       await sendWelcomeEmail({ to: updated.email, teacherName: updated.name, tempPassword });
     } catch (e) {
+      emailSent = false;
       console.error("Échec d'envoi de l'email de bienvenue :", e);
     }
   }
 
-  return NextResponse.json({ teacher: updated });
+  // Le mot de passe temporaire n'est renvoyé qu'à la première activation
+  // (quand on vient d'en générer un), pour pouvoir le communiquer
+  // directement même si l'email de bienvenue échoue.
+  return NextResponse.json({ teacher: updated, tempPassword, emailSent });
 }
