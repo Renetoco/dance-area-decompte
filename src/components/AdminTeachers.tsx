@@ -55,8 +55,13 @@ export default function AdminTeachers() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
+      const data = await res.json().catch(() => null);
       if (res.ok) {
-        setMessage(`Compte activé et identifiants envoyés à ${email}.`);
+        setMessage(
+          data?.tempPassword
+            ? `Compte activé pour ${email} — mot de passe temporaire : ${data.tempPassword} (aussi envoyé par email${data.emailSent === false ? ", mais l'envoi a échoué : notez-le bien !" : ""}).`
+            : `Compte activé et identifiants envoyés à ${email}.`
+        );
         await load();
       }
     } finally {

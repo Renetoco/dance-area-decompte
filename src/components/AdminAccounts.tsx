@@ -52,7 +52,11 @@ export default function AdminAccounts() {
         setMessage(data.error);
         return;
       }
-      setMessage(`Compte créé pour ${email}, identifiants envoyés par email.`);
+      setMessage(
+        data.tempPassword
+          ? `Compte créé pour ${email} — mot de passe temporaire : ${data.tempPassword} (aussi envoyé par email${data.emailSent === false ? ", mais l'envoi a échoué : notez-le bien !" : ""}).`
+          : `Compte créé pour ${email}, identifiants envoyés par email.`
+      );
       setName("");
       setEmail("");
       await load();
@@ -160,7 +164,7 @@ export default function AdminAccounts() {
         </table>
       </div>
 
-      {message && <p className="muted" style={{ marginTop: 10 }}>{message}</p>}
+      {message && <div className="success-msg" style={{ marginTop: 10 }}>{message}</div>}
 
       <h3 style={{ marginTop: 20, fontSize: "0.9rem" }}>Créer un nouveau compte</h3>
       <form onSubmit={createAccount}>
