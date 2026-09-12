@@ -1,0 +1,138 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { AdminRole } from "@prisma/client";
+import { formatPeriodLabel } from "@/lib/dates";
+import CourseParticipants from "@/components/CourseParticipants";
+
+const TYPE_LABELS: Record<string, string> = {
+  REMPLACEMENT_EFFECTUE: "Remplacement effectué",
+  ABSENCE_REMPLACEE: "Absence remplacée",
+  ABSENCE_NON_REMPLACEE: "Absence non remplacée",
+  AUTRE: "Autre",
+};
+
+export default async function FicheCoursPage({ params }: { params: { id: string } }) {
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  if (!admin) redirect("/connexion");
+
+  const course = await prisma.course.findUnique({
+    where: { id: params.id },
+    include: {
+      teacher: { select: { id: true, name: true, email: true, role: true } },
+      participants: {
+        include: { teacher: { select: { id: true, name: true, role: true } } },
+        orderBy: { createdAt: "asc" },
+      },
+      declarationItems: {
+        include: {
+          otherTeacher: { select: { id: true, name: true } },
+          declaration: { select: { period: true, teacher: { select: { id: true, name: true } } } },
+        },
+      },
+    },
+  });
+  if (!course) notFound();
+
+  const history = course.declarationItems
+    .slice()
+    .sort((a, b) => (a.declaration.period === b.declaration.period ? 0 : a.declaration.period < b.declaration.period ? 1 : -1));
+
+  const allTeachers = await prisma.teacher.findMany({
+    where: { active: true },
+    select: { id: true, name: true, role: true },
+    orderBy: { name: "asc" },
+  });
+
+  const canEdit = admin.role === "ADMIN";
+
+  return (
+    <div>
+      <Link href="/admin/cours" className="back-link">
+        ← Retour à la liste des cours
+      </Link>
+
+      <div className="fiche-header">
+        <div>
+          <h1>{course.nomCours}</h1>
+          <div className="fiche-meta">
+            <span className="muted">{course.categorie}</span>
+            <span className="muted">Code {course.code}</span>
+            {course.jour && (
+              <span className="muted">
+                {course.jour} {course.heureDebut ? `${course.heureDebut} – ${course.heureFin ?? ""}` : ""}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <h2>Titulaire</h2>
+      {course.teacher ? (
+        <p>
+          <Link href={`/admin/profs/${course.teacher.id}`}>{course.teacher.name}</Link>
+          {course.teacher.role === "MUSICIEN" && <span className="badge info" style={{ marginLeft: 8 }}>Musicien·ne</span>}
+        </p>
+      ) : (
+        <p className="muted">Aucun·e titulaire renseigné·e pour ce cours.</p>
+      )}
+
+      <h2>Musicien·nes et co-enseignant·es rattaché·es</h2>
+      <p className="muted" style={{ marginTop: -4 }}>
+        Pour les cours où quelqu'un accompagne (ex. un·e musicien·ne au piano pour un cours de danse classique) ou
+        co-enseigne régulièrement, sans en être titulaire.
+      </p>
+      <CourseParticipants
+        courseId={course.id}
+        initialParticipants={course.participants}
+        teachers={allTeachers}
+        canEdit={canEdit}
+      />
+
+      <h2>Historique des changements déclarés sur ce cours ({history.length})</h2>
+      <p className="muted" style={{ marginTop: -4 }}>
+        Toutes périodes confondues — permet de voir si plusieurs profs sont intervenu·es sur ce cours, à la même
+        date ou à des dates différentes.
+      </p>
+      {history.length === 0 ? (
+        <p className="muted">Aucun changement déclaré sur ce cours pour l'instant.</p>
+      ) : (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Période</th>
+                <th>Date</th>
+                <th>Déclaré par</th>
+                <th>Type</th>
+                <th>Avec</th>
+                <th>Commentaire</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((item) => (
+                <tr key={item.id}>
+                  <td>{formatPeriodLabel(item.declaration.period)}</td>
+                  <td>{item.date ? new Date(item.date).toLocaleDateString("fr-CH") : "—"}</td>
+                  <td>
+                    <Link href={`/admin/profs/${item.declaration.teacher.id}`}>{item.declaration.teacher.name}</Link>
+                  </td>
+                  <td>{TYPE_LABELS[item.type] ?? item.type}</td>
+                  <td>
+                    {item.otherTeacher ? (
+                      <Link href={`/admin/profs/${item.otherTeacher.id}`}>{item.otherTeacher.name}</Link>
+                    ) : (
+                      item.otherTeacherFreeText ?? "—"
+                    )}
+                  </td>
+                  <td>{item.comment ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

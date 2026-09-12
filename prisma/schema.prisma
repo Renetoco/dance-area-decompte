@@ -36,27 +36,46 @@ enum ReminderType {
   AUTO_SOUMISSION
 }
 
+enum TeacherRole {
+  ENSEIGNANT // donne un ou plusieurs cours en tant que prof titulaire
+  MUSICIEN // accompagne des cours (ex. danse classique) sans en être titulaire
+}
+
+// Rôle d'une personne rattachée à un cours en plus (ou à la place) du prof
+// titulaire — typiquement un·e musicien·ne accompagnateur·rice, ou un·e
+// second·e enseignant·e qui co-anime régulièrement le même cours.
+enum CourseParticipantRole {
+  MUSICIEN
+  CO_ENSEIGNANT
+}
+
 model Teacher {
-  id            String   @id @default(cuid())
-  analyticCode  String   @unique // "code analytique", ex. "3415" — clé pivot avec le fichier Excel
+  id            String      @id @default(cuid())
+  analyticCode  String      @unique // "code analytique", ex. "3415" — clé pivot avec le fichier Excel
   name          String
   // Le fichier Excel source ne contient pas d'email par prof : à l'import,
   // un Teacher est créé SANS email/mot de passe ("dans le trombinoscope,
   // pas encore de compte"). L'admin renseigne l'email ensuite (un par un ou
   // via un mapping code -> email) pour activer le compte et déclencher
   // l'envoi des identifiants — voir /api/admin/teachers.
-  email         String?  @unique
+  email         String?     @unique
   passwordHash  String?
-  mustResetPwd  Boolean  @default(true) // force le changement de mot de passe à la 1ère connexion
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  mustResetPwd  Boolean     @default(true) // force le changement de mot de passe à la 1ère connexion
+  active        Boolean     @default(true)
+  // Enseignant·e "classique" ou musicien·ne accompagnateur·rice (ex. piano
+  // pour un cours de danse classique) — voir CourseParticipant pour le lien
+  // avec les cours qu'iel accompagne sans en être titulaire.
+  role          TeacherRole @default(ENSEIGNANT)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  courses       Course[]
-  declarations  MonthlyDeclaration[]
-  reminderLogs  ReminderLog[]
+  courses            Course[]
+  declarations       MonthlyDeclaration[]
+  reminderLogs       ReminderLog[]
   // Cas où ce prof est cité comme "autre prof" dans la ligne d'un collègue
-  citedInItems  DeclarationItem[] @relation("OtherTeacher")
+  citedInItems       DeclarationItem[]  @relation("OtherTeacher")
+  // Cours où cette personne intervient en plus du·de la titulaire (musicien·ne, co-prof)
+  courseParticipations CourseParticipant[]
 }
 
 model Course {
@@ -75,6 +94,23 @@ model Course {
   teacher     Teacher? @relation(fields: [teacherId], references: [id])
 
   declarationItems DeclarationItem[]
+  // Personnes supplémentaires rattachées à ce cours (musicien·ne accompagnateur·rice, co-prof)
+  participants     CourseParticipant[]
+}
+
+// Table de liaison : qui d'autre que le·la titulaire intervient sur ce cours
+// (ex. un·e musicien·ne qui joue pendant un cours de danse classique). Permet
+// à un même cours d'avoir plusieurs profs/musicien·nes rattaché·es à la fois.
+model CourseParticipant {
+  id        String                @id @default(cuid())
+  courseId  String
+  course    Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacherId String
+  teacher   Teacher               @relation(fields: [teacherId], references: [id])
+  role      CourseParticipantRole @default(MUSICIEN)
+  createdAt DateTime              @default(now())
+
+  @@unique([courseId, teacherId])
 }
 
 model MonthlyDeclaration {

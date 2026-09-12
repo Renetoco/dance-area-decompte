@@ -2,10 +2,45 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin, generateTempPassword, hashPassword } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/email";
-import { AdminRole } from "@prisma/client";
+import { AdminRole, TeacherRole } from "@prisma/client";
+
+// Fiche détaillée d'un prof : ses cours (titulaire + participations
+// musicien/co-prof) et son historique de déclarations, toutes périodes.
+export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
+
+  const teacher = await prisma.teacher.findUnique({
+    where: { id: params.id },
+    include: {
+      courses: {
+        where: { active: true },
+        orderBy: [{ jour: "asc" }, { heureDebut: "asc" }],
+      },
+      courseParticipations: {
+        include: { course: true },
+      },
+      declarations: {
+        orderBy: { period: "desc" },
+        select: {
+          id: true,
+          period: true,
+          status: true,
+          hasChanges: true,
+          submittedAt: true,
+          items: { select: { id: true } },
+        },
+      },
+    },
+  });
+  if (!teacher) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
+
+  return NextResponse.json({ teacher });
+}
 
 // Met à jour l'email (ce qui active le compte s'il n'existait pas encore
-// et envoie les identifiants) et/ou le statut actif/inactif d'un prof.
+// et envoie les identifiants), le rôle (enseignant/musicien) et/ou le
+// statut actif/inactif d'un prof.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const admin = await requireAdmin([AdminRole.ADMIN]);
   if (!admin) return NextResponse.json({ error: "Réservé à l'administrateur." }, { status: 403 });
@@ -13,10 +48,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const teacher = await prisma.teacher.findUnique({ where: { id: params.id } });
   if (!teacher) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
 
-  const { email, active } = await req.json();
-  const data: { email?: string; active?: boolean; passwordHash?: string; mustResetPwd?: boolean } = {};
+  const { email, active, role } = await req.json();
+  const data: {
+    email?: string;
+    active?: boolean;
+    passwordHash?: string;
+    mustResetPwd?: boolean;
+    role?: TeacherRole;
+  } = {};
 
   if (typeof active === "boolean") data.active = active;
+  if (role && role in TeacherRole) data.role = role as TeacherRole;
 
   let tempPassword: string | undefined;
   if (email) {
@@ -33,7 +75,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const updated = await prisma.teacher.update({
     where: { id: params.id },
     data,
-    select: { id: true, analyticCode: true, name: true, email: true, active: true, mustResetPwd: true },
+    select: { id: true, analyticCode: true, name: true, email: true, active: true, mustResetPwd: true, role: true },
   });
 
   if (tempPassword && updated.email) {

@@ -19,6 +19,8 @@
   --danger-fg: #b3261e;
   --neutral-bg: rgba(66, 81, 109, 0.12);
   --neutral-fg: #5a6478;
+  --info-bg: rgba(59, 111, 214, 0.14);
+  --info-fg: #2a55a8;
 
   --glass: rgba(255, 255, 255, 0.55);
   --glass-strong: rgba(255, 255, 255, 0.8);
@@ -63,6 +65,8 @@
     --danger-fg: #ff8a80;
     --neutral-bg: rgba(244, 246, 248, 0.1);
     --neutral-fg: #c6ccd8;
+    --info-bg: rgba(107, 159, 255, 0.18);
+    --info-fg: #8fb4ff;
 
     --glass: rgba(43, 52, 66, 0.42);
     --glass-strong: rgba(43, 52, 66, 0.6);
@@ -103,6 +107,8 @@
   --danger-fg: #ff8a80;
   --neutral-bg: rgba(244, 246, 248, 0.1);
   --neutral-fg: #c6ccd8;
+  --info-bg: rgba(107, 159, 255, 0.18);
+  --info-fg: #8fb4ff;
 
   --glass: rgba(43, 52, 66, 0.42);
   --glass-strong: rgba(43, 52, 66, 0.6);
@@ -216,19 +222,31 @@ p.muted,
   margin-bottom: 16px;
 }
 
+/* Carte imbriquée dans une autre carte (ex. une ligne de changement) : plus discrète */
+.card.nested {
+  background: var(--glass);
+  box-shadow: none;
+  margin-bottom: 12px;
+}
+
+.card.nested:last-child {
+  margin-bottom: 0;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   border: none;
-  border-radius: var(--radius-sm);
-  padding: 14px 18px;
-  font-size: 1rem;
+  border-radius: 14px;
+  padding: 17px 20px;
+  font-size: 1.05rem;
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
   width: 100%;
+  min-height: 54px;
   background: var(--accent);
   color: var(--accent-ink);
   box-shadow: 0 10px 22px -10px rgba(255, 131, 0, 0.55);
@@ -321,6 +339,42 @@ label {
   margin-bottom: 4px;
 }
 
+/* ===== Contrôle segmenté (ex. "Rien n'a changé" / "Il y a des changements") ===== */
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.seg {
+  border: 1.5px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 18px 14px;
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--glass-shadow);
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 60px;
+}
+
+.seg:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.seg.selected {
+  border-color: rgba(255, 131, 0, 0.55);
+  background: rgba(255, 131, 0, 0.16);
+  color: var(--accent);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -345,6 +399,10 @@ label {
 .badge.neutral {
   background: var(--neutral-bg);
   color: var(--neutral-fg);
+}
+.badge.info {
+  background: var(--info-bg);
+  color: var(--info-fg);
 }
 
 .error-msg {
@@ -475,6 +533,88 @@ tbody tr.is-clickable:hover {
   font-size: 0.76rem;
   color: var(--muted);
   margin-top: 3px;
+}
+
+/* ===== Petit graphique en barres horizontales (aperçu du tableau de bord) ===== */
+.metric-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.metric-bar-row {
+  display: grid;
+  grid-template-columns: 148px 1fr 52px;
+  align-items: center;
+  gap: 12px;
+}
+
+.metric-bar-row .label {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.metric-bar-row .track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.metric-bar-row .fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.metric-bar-row .value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .metric-bar-row {
+    grid-template-columns: 108px 1fr 44px;
+  }
+}
+
+.fiche-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.fiche-header h1 {
+  margin-bottom: 6px;
+}
+
+.fiche-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 6px 0 0;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+  margin-bottom: 14px;
+}
+
+.back-link:hover {
+  color: var(--ink);
 }
 
 /* ===== App shell admin (sidebar + contenu) ===== */

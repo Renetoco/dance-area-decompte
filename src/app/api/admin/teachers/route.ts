@@ -16,6 +16,7 @@ export async function GET() {
       email: true,
       active: true,
       mustResetPwd: true,
+      role: true,
       _count: { select: { courses: true } },
     },
   });

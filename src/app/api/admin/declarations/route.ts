@@ -39,6 +39,16 @@ export async function GET(req: NextRequest) {
   const declaredIds = new Set(declarations.map((d) => d.teacherId));
   const missing = allTeachers.filter((t) => !declaredIds.has(t.id));
 
+  // Nombre total de cours actifs au programme, pour le graphique du tableau
+  // de bord (indépendant de la période choisie).
+  const totalCourses = await prisma.course.count({ where: { active: true } });
+
+  const allItems = declarations.flatMap((d) => d.items);
+  const coursesWithChangesIds = new Set(allItems.map((i) => i.courseId).filter(Boolean));
+  const coursesNotGiven = new Set(
+    allItems.filter((i) => i.type === "ABSENCE_NON_REMPLACEE" && i.courseId).map((i) => i.courseId)
+  );
+
   const summary = {
     total: allTeachers.length,
     soumisManuel: declarations.filter((d) => d.status === "SUBMITTED_MANUAL").length,
@@ -46,6 +56,12 @@ export async function GET(req: NextRequest) {
     pasEncoreSoumis: declarations.filter((d) => d.status === "DRAFT").length + missing.length,
     avecChangements: declarations.filter((d) => d.hasChanges).length,
     sansChangements: declarations.filter((d) => d.hasChanges === false).length,
+    // Pour le graphique : cours au programme, cours effectivement donnés
+    // (= cours actifs moins les absences non remplacées déclarées ce mois),
+    // et cours ayant fait l'objet d'au moins un changement déclaré.
+    totalCourses,
+    coursesGiven: Math.max(0, totalCourses - coursesNotGiven.size),
+    coursesWithChanges: coursesWithChangesIds.size,
   };
 
   return NextResponse.json({ period, declarations, missingTeachers: missing, summary });

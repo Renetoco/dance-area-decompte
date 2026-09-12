@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+
+type TeacherRole = "ENSEIGNANT" | "MUSICIEN";
 
 type Teacher = {
   id: string;
@@ -9,7 +12,13 @@ type Teacher = {
   email: string | null;
   active: boolean;
   mustResetPwd: boolean;
+  role: TeacherRole;
   _count: { courses: number };
+};
+
+const ROLE_LABELS: Record<TeacherRole, string> = {
+  ENSEIGNANT: "Enseignant·e",
+  MUSICIEN: "Musicien·ne",
 };
 
 export default function AdminTeachers() {
@@ -80,6 +89,21 @@ export default function AdminTeachers() {
     }
   }
 
+  async function changeRole(t: Teacher, role: TeacherRole) {
+    if (role === t.role) return;
+    setBusyId(t.id);
+    try {
+      await fetch(`/api/admin/teachers/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function toggleActive(t: Teacher) {
     setBusyId(t.id);
     try {
@@ -114,6 +138,7 @@ export default function AdminTeachers() {
             <tr>
               <th>Code</th>
               <th>Nom</th>
+              <th>Rôle</th>
               <th>Cours</th>
               <th>Email / compte</th>
               <th>Statut</th>
@@ -126,7 +151,23 @@ export default function AdminTeachers() {
               return (
                 <tr key={t.id}>
                   <td>{t.analyticCode}</td>
-                  <td>{t.name}</td>
+                  <td>
+                    <Link href={`/admin/profs/${t.id}`}>{t.name}</Link>
+                  </td>
+                  <td>
+                    <select
+                      value={t.role}
+                      disabled={busyId === t.id}
+                      onChange={(e) => changeRole(t, e.target.value as TeacherRole)}
+                      style={{ width: 140 }}
+                    >
+                      {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                   <td>{t._count.courses}</td>
                   <td>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>

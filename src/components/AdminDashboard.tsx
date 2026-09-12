@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 
 type Role = "ADMIN" | "COMPTABILITE" | "DIRECTION";
 
@@ -23,6 +24,9 @@ type Summary = {
   pasEncoreSoumis: number;
   avecChangements: number;
   sansChangements: number;
+  totalCourses: number;
+  coursesGiven: number;
+  coursesWithChanges: number;
 };
 
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
@@ -130,6 +134,15 @@ export default function AdminDashboard() {
       </div>
 
       {summary && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ margin: "0 0 14px", fontSize: "0.85rem", color: "var(--ink-soft)" }}>
+            Aperçu — cours et professeurs
+          </h3>
+          <MetricBars summary={summary} />
+        </div>
+      )}
+
+      {summary && (
         <div className="stat-grid">
           <div className="stat-tile">
             <div className="value">{summary.total}</div>
@@ -178,7 +191,11 @@ export default function AdminDashboard() {
               <Fragment key={d.id}>
                 <tr className="is-clickable" onClick={() => toggleExpand(d.id)}>
                   <td>{expanded === d.id ? "▾" : "▸"}</td>
-                  <td>{d.teacher.name}</td>
+                  <td>
+                    <Link href={`/admin/profs/${d.teacher.id}`} onClick={(e) => e.stopPropagation()}>
+                      {d.teacher.name}
+                    </Link>
+                  </td>
                   <td>{d.teacher.analyticCode}</td>
                   <td>
                     <span className={`badge ${STATUS_LABELS[d.status].cls}`}>{STATUS_LABELS[d.status].label}</span>
@@ -222,12 +239,43 @@ export default function AdminDashboard() {
 
       {missing.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
-          <p style={{ fontWeight: 600, margin: 0 }}>Profs sans déclaration pour cette période ({missing.length})</p>
+          <p style={{ fontWeight: 600, margin: 0 }}>
+            Professeurs sans déclaration pour cette période ({missing.length})
+          </p>
           <p className="muted" style={{ fontSize: "0.85rem" }}>
-            {missing.map((t) => t.name).join(", ")}
+            {missing.map((t, i) => (
+              <span key={t.id}>
+                <Link href={`/admin/profs/${t.id}`}>{t.name}</Link>
+                {i < missing.length - 1 ? ", " : ""}
+              </span>
+            ))}
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function MetricBars({ summary }: { summary: Summary }) {
+  const rows = [
+    { label: "Cours au programme", value: summary.totalCourses, color: "var(--accent-2)" },
+    { label: "Professeurs actifs", value: summary.total, color: "var(--accent)" },
+    { label: "Cours donnés", value: summary.coursesGiven, color: "var(--ok-fg)" },
+    { label: "Cours avec changements", value: summary.coursesWithChanges, color: "var(--warn-fg)" },
+  ];
+  const max = Math.max(1, ...rows.map((r) => r.value));
+
+  return (
+    <div className="metric-bars">
+      {rows.map((r) => (
+        <div className="metric-bar-row" key={r.label}>
+          <span className="label">{r.label}</span>
+          <span className="track">
+            <span className="fill" style={{ width: `${(r.value / max) * 100}%`, background: r.color }} />
+          </span>
+          <span className="value">{r.value}</span>
+        </div>
+      ))}
     </div>
   );
 }

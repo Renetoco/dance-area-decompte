@@ -59,8 +59,8 @@ export type Bundle = {
 
 const STATUS_BADGE: Record<DeclarationStatus, { label: string; cls: string }> = {
   DRAFT: { label: "Brouillon — pas encore soumis", cls: "warning" },
-  SUBMITTED_MANUAL: { label: "Soumis", cls: "success" },
-  SUBMITTED_AUTO: { label: "Soumis automatiquement (deadline dépassée)", cls: "neutral" },
+  SUBMITTED_MANUAL: { label: "Envoyée", cls: "success" },
+  SUBMITTED_AUTO: { label: "Envoyée automatiquement (délai dépassé)", cls: "neutral" },
 };
 
 const emptyForm = {
@@ -214,28 +214,26 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         <p className="muted" style={{ marginTop: 8 }}>
           {locked
             ? "La période est close, votre décompte est en lecture seule."
-            : `À soumettre avant le ${bundle.deadlineLabel}. Vous pouvez modifier votre décompte autant de fois que nécessaire jusque-là.`}
+            : `Vous pouvez encore modifier votre déclaration jusqu'au ${bundle.deadlineLabel}.`}
         </p>
       </div>
 
       {error && <div className="error-msg">{error}</div>}
 
       <div className="card">
-        <p style={{ fontWeight: 600 }}>
-          Est-ce qu'il y a eu des changements sur votre planning durant cette période ?
-        </p>
-        <div className="btn-row">
+        <p style={{ fontWeight: 700, fontSize: "1.05rem" }}>Avez-vous eu des changements ce mois-ci ?</p>
+        <div className="segmented">
           <button
-            className="btn secondary"
-            style={declaration.hasChanges === false ? { background: "#111", color: "#fff" } : {}}
+            type="button"
+            className={`seg ${declaration.hasChanges === false ? "selected" : ""}`}
             disabled={!canEdit || busy}
             onClick={() => handleHasChanges(false)}
           >
             Non, rien n'a changé
           </button>
           <button
-            className="btn secondary"
-            style={declaration.hasChanges === true ? { background: "#111", color: "#fff" } : {}}
+            type="button"
+            className={`seg ${declaration.hasChanges === true ? "selected" : ""}`}
             disabled={!canEdit || busy}
             onClick={() => handleHasChanges(true)}
           >
@@ -249,7 +247,7 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
           <h2 style={{ marginTop: 0 }}>Changements déclarés</h2>
           {declaration.items.length === 0 && <p className="muted">Aucun changement ajouté pour l'instant.</p>}
           {declaration.items.map((item) => (
-            <div key={item.id} className="card" style={{ background: "#fafafa" }}>
+            <div key={item.id} className="card nested">
               <p style={{ fontWeight: 600, margin: 0 }}>{TYPE_LABELS[item.type]}</p>
               {item.course && (
                 <p className="muted" style={{ margin: "4px 0" }}>
@@ -374,12 +372,12 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
           onClick={submitDeclaration}
           disabled={busy || isSubmitted || (declaration.hasChanges === true && declaration.items.length === 0)}
         >
-          {isSubmitted ? "Déjà soumis ✓" : "Soumettre définitivement"}
+          {isSubmitted ? "Déjà envoyée ✓" : "Envoyer ma déclaration"}
         </button>
       )}
       {declaration.hasChanges === true && declaration.items.length === 0 && canEdit && (
         <p className="muted" style={{ textAlign: "center", marginTop: 8 }}>
-          Ajoutez au moins un changement avant de soumettre (ou repassez sur "Non, rien n'a changé").
+          Ajoutez au moins un changement, ou choisissez « Non, rien n'a changé » ci-dessus.
         </p>
       )}
 
