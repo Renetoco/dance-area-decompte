@@ -161,6 +161,11 @@ model AdminUser {
   passwordHash String
   role         AdminRole
   active       Boolean   @default(true)
+  // false pour les comptes existants (mot de passe déjà choisi par la
+  // personne) ; mis à true à la création d'un compte ou à une
+  // réinitialisation, pour forcer un changement au prochain login — voir
+  // SECURITY-REVIEW.md #8.
+  mustResetPwd Boolean   @default(false)
   createdAt    DateTime  @default(now())
 }
 
@@ -181,4 +186,16 @@ model CronRun {
   jobDate   String   @unique // "2026-09-20"
   ranAt     DateTime @default(now())
   summary   String?
+}
+
+// Compteur générique de tentatives (login, mot de passe oublié, ...), clé
+// libre du type "login:email:x@y.com" ou "login:ip:1.2.3.4" — voir
+// src/lib/rateLimit.ts et SECURITY-REVIEW.md #2 / #5.
+model RateLimit {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  attempts    Int       @default(0)
+  windowStart DateTime  @default(now())
+  lockedUntil DateTime?
+  updatedAt   DateTime  @updatedAt
 }

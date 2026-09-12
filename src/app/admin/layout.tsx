@@ -7,6 +7,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin();
   if (!admin) redirect("/connexion");
+  if (admin.mustResetPwd) redirect("/admin-mot-de-passe");
 
   const roleLabel =
     admin.role === "ADMIN" ? "Administrateur" : admin.role === "COMPTABILITE" ? "Comptabilité" : "Direction";

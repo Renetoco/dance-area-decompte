@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       email: normalizedEmail,
       role,
       passwordHash: await hashPassword(tempPassword),
+      mustResetPwd: true,
     },
   });
 

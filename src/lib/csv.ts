@@ -16,7 +16,15 @@ const STATUS_LABELS: Record<string, string> = {
 
 function csvEscape(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";
-  const s = String(value);
+  let s = String(value);
+  // Neutralise l'injection de formule CSV (SECURITY-REVIEW.md #4) : un champ
+  // texte librement rempli par un prof (commentaire, "autre prof") qui
+  // commence par = + - @ ou une tabulation/retour chariot peut être
+  // interprété comme une formule par Excel/Sheets à l'ouverture. On préfixe
+  // d'une apostrophe pour forcer une lecture en texte brut.
+  if (/^[=+\-@\t\r]/.test(s)) {
+    s = "'" + s;
+  }
   if (/[",\n;]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`;
   }

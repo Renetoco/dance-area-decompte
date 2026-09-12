@@ -1,6 +1,19 @@
 import nodemailer from "nodemailer";
 import { formatDeadlineLabel, formatPeriodLabel } from "./dates";
 
+/** Échappe les caractères HTML spéciaux avant interpolation dans un email
+ * (SECURITY-REVIEW.md #7) — teacherName vient de la base (modifiable par un
+ * admin), on évite qu'un caractère < ou & y casse le rendu ou injecte du
+ * balisage dans le client mail du destinataire. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /**
  * Envoi via le relais SMTP d'Infomaniak. Voir DEPLOIEMENT.md pour la
  * marche à suivre exacte (créer l'adresse d'envoi, récupérer le mot de
@@ -47,7 +60,7 @@ export async function sendReminderEmail(opts: {
   const link = `${APP_URL}/prof`;
   const subject = `Rappel : décompte à soumettre avant le ${formatDeadlineLabel(period)}`;
   const html = wrapHtml(`
-    <p>Bonjour ${teacherName},</p>
+    <p>Bonjour ${escapeHtml(teacherName)},</p>
     <p>Il reste <strong>${daysLeft} jour${daysLeft > 1 ? "s" : ""}</strong> pour soumettre
     votre décompte pour la période du ${formatPeriodLabel(period)}.</p>
     <p>Si rien n'a changé sur votre planning, ça prend 10 secondes :
@@ -73,7 +86,7 @@ export async function sendAutoSubmitNotice(opts: {
   const { to, teacherName, period, hadChanges } = opts;
   const subject = `Votre décompte de ${formatPeriodLabel(period)} a été soumis automatiquement`;
   const html = wrapHtml(`
-    <p>Bonjour ${teacherName},</p>
+    <p>Bonjour ${escapeHtml(teacherName)},</p>
     <p>La deadline du ${formatDeadlineLabel(period)} est passée sans soumission
     manuelle de votre part. Votre décompte a donc été soumis automatiquement
     ${hadChanges ? "avec les informations que vous aviez déjà saisies." : "avec la mention \"aucun changement\"."}</p>
@@ -93,7 +106,7 @@ export async function sendWelcomeEmail(opts: {
   const link = `${APP_URL}/connexion`;
   const subject = "Votre accès au décompte mensuel Dance Area";
   const html = wrapHtml(`
-    <p>Bonjour ${teacherName},</p>
+    <p>Bonjour ${escapeHtml(teacherName)},</p>
     <p>Un compte a été créé pour vous sur la plateforme de décompte mensuel
     de Dance Area.</p>
     <p>Identifiant : <strong>${to}</strong><br/>
@@ -117,7 +130,7 @@ export async function sendPasswordResetEmail(opts: {
   const link = `${APP_URL}/connexion`;
   const subject = "Réinitialisation de votre mot de passe — Dance Area";
   const html = wrapHtml(`
-    <p>Bonjour ${teacherName},</p>
+    <p>Bonjour ${escapeHtml(teacherName)},</p>
     <p>Voici votre nouveau mot de passe temporaire : <strong>${tempPassword}</strong></p>
     <p>Il vous sera demandé de le changer à la prochaine connexion.</p>
     <p style="margin: 24px 0;">
