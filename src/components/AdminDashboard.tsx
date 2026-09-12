@@ -176,7 +176,7 @@ export default function AdminDashboard() {
           <tbody>
             {declarations.map((d) => (
               <Fragment key={d.id}>
-                <tr onClick={() => toggleExpand(d.id)} style={{ cursor: "pointer" }}>
+                <tr className="is-clickable" onClick={() => toggleExpand(d.id)}>
                   <td>{expanded === d.id ? "▾" : "▸"}</td>
                   <td>{d.teacher.name}</td>
                   <td>{d.teacher.analyticCode}</td>
@@ -188,11 +188,11 @@ export default function AdminDashboard() {
                   <td>{d.items.length}</td>
                 </tr>
                 {expanded === d.id && detail && (
-                  <tr>
-                    <td colSpan={7} style={{ background: "#fafafa" }}>
+                  <tr className="detail-row">
+                    <td colSpan={7}>
                       {detail.items.length === 0 && <p className="muted">Aucune ligne de changement.</p>}
                       {detail.items.map((item: any) => (
-                        <div key={item.id} style={{ padding: "8px 0", borderBottom: "1px solid #eee" }}>
+                        <div key={item.id} className="detail-item">
                           <strong>{TYPE_LABELS[item.type]}</strong>
                           {item.course ? ` — ${item.course.nomCours}` : ""}
                           {item.date ? ` — ${item.date.slice(0, 10)}` : ""}
