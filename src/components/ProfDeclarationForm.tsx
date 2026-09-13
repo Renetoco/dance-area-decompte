@@ -338,7 +338,7 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             </div>
           ))}
 
-          {declaration.hasChanges === true && showForm !== "new" && (
+          {declaration.hasChanges === true && declaration.items.length > 0 && showForm !== "new" && (
             <button className="btn secondary" onClick={openNewForm}>
               + Ajouter un changement
             </button>
