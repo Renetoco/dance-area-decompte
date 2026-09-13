@@ -234,6 +234,36 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         </p>
       </div>
 
+      <div className="card">
+        <p style={{ fontWeight: 700, fontSize: "1.05rem", marginTop: 0 }}>Vos cours ce mois-ci</p>
+        {bundle.myCourses.length === 0 ? (
+          <p className="muted">Aucun cours ne vous est rattaché comme titulaire pour l'instant.</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {bundle.myCourses.map((c) => (
+              <li
+                key={c.id}
+                style={{
+                  padding: "8px 0",
+                  borderTop: "1px solid var(--glass-border)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span>
+                  {c.nomCours} <span className="muted">({c.code})</span>
+                </span>
+                <span className="muted">
+                  {c.jour ? `${c.jour}${c.heureDebut ? ` — ${c.heureDebut}${c.heureFin ? `–${c.heureFin}` : ""}` : ""}` : "—"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {error && <div className="error-msg">{error}</div>}
 
       <div className="card">
