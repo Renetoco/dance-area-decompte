@@ -63,6 +63,22 @@ const STATUS_BADGE: Record<DeclarationStatus, { label: string; cls: string }> = 
   SUBMITTED_AUTO: { label: "Envoyée automatiquement (délai dépassé)", cls: "neutral" },
 };
 
+/**
+ * Calcule la durée d'un cours (en heures, ex. 1.25) à partir de ses horaires
+ * "HH:MM" — sert à pré-remplir le champ Heures dès qu'un cours est
+ * sélectionné, pour éviter au prof de le recalculer à la main. Renvoie
+ * null si le cours n'a pas d'horaire défini (ex. "packs" Etudes/SAE).
+ */
+function dureeCoursEnHeures(course: Course | null | undefined): number | null {
+  if (!course || !course.heureDebut || !course.heureFin) return null;
+  const [h1, m1] = course.heureDebut.split(":").map(Number);
+  const [h2, m2] = course.heureFin.split(":").map(Number);
+  if ([h1, m1, h2, m2].some((n) => Number.isNaN(n))) return null;
+  let diffMinutes = h2 * 60 + m2 - (h1 * 60 + m1);
+  if (diffMinutes <= 0) diffMinutes += 24 * 60; // cas rare, passage après minuit
+  return Math.round((diffMinutes / 60) * 100) / 100;
+}
+
 const emptyForm = {
   type: "REMPLACEMENT_EFFECTUE" as ChangeType,
   courseId: "",
@@ -298,7 +314,21 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
           </select>
 
           <label>Cours concerné</label>
-          <select value={form.courseId} onChange={(e) => setForm({ ...form, courseId: e.target.value })}>
+          <select
+            value={form.courseId}
+            onChange={(e) => {
+              const courseId = e.target.value;
+              const course = allCourses.find((c) => c.id === courseId) ?? null;
+              const dureeAuto = dureeCoursEnHeures(course);
+              setForm({
+                ...form,
+                courseId,
+                // Pré-rempli automatiquement selon l'horaire du cours choisi ;
+                // reste modifiable si la durée réelle a été différente.
+                hours: dureeAuto != null ? String(dureeAuto) : form.hours,
+              });
+            }}
+          >
             <option value="">— Sélectionner —</option>
             <optgroup label="Vos cours">
               {bundle.myCourses.map((c) => (
@@ -340,7 +370,12 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             />
           )}
 
-          <label>Heures</label>
+          <label>
+            Heures{" "}
+            <span className="muted" style={{ fontWeight: 400 }}>
+              (pré-rempli selon l'horaire du cours choisi, modifiable)
+            </span>
+          </label>
           <input
             type="number"
             step="0.25"
