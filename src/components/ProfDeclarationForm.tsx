@@ -231,24 +231,39 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         </button>
       </div>
 
-      <div className="card">
-        <span className={`badge ${STATUS_BADGE[declaration.status].cls}`}>
-          {STATUS_BADGE[declaration.status].label}
-        </span>
-        <p className="muted" style={{ marginTop: 8 }}>
-          {locked
-            ? "La période est close, votre décompte est en lecture seule."
-            : `Vous pouvez encore modifier votre déclaration jusqu'au ${bundle.deadlineLabel}.`}
-        </p>
-      </div>
-
       {error && <div className="error-msg">{error}</div>}
 
-      {declaration.hasChanges === true && (
+      {locked ? (
         <div className="card">
-          <h2 style={{ marginTop: 0 }}>Changements déclarés ce mois-ci</h2>
+          <span className={`badge ${STATUS_BADGE[declaration.status].cls}`}>
+            {STATUS_BADGE[declaration.status].label}
+          </span>
+          <p className="muted" style={{ marginTop: 8 }}>
+            La période est close depuis le {bundle.deadlineLabel}. Votre décompte est en lecture seule — retrouvez-le
+            via « Voir l'historique » tout en bas de cette page.
+          </p>
+        </div>
+      ) : (
+        <div className="card">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 8,
+              marginBottom: 4,
+            }}
+          >
+            <h2 style={{ margin: 0 }}>Vos entrées ce mois-ci</h2>
+            <span className={`badge ${STATUS_BADGE[declaration.status].cls}`}>
+              {STATUS_BADGE[declaration.status].label}
+            </span>
+          </div>
+          <p className="muted" style={{ marginTop: 0 }}>Modifiable jusqu'au {bundle.deadlineLabel}.</p>
+
           {declaration.items.length === 0 && showForm !== "new" && (
-            <p className="muted">Aucun changement ajouté pour l'instant.</p>
+            <p className="muted">Aucune entrée pour l'instant.</p>
           )}
           {declaration.items.map((item) => (
             <div key={item.id} className="card nested">
@@ -280,7 +295,7 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             </div>
           ))}
 
-          {canEdit && showForm !== "new" && (
+          {declaration.hasChanges === true && showForm !== "new" && (
             <button className="btn secondary" onClick={openNewForm}>
               + Ajouter un changement
             </button>
@@ -288,27 +303,29 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         </div>
       )}
 
-      <div className="card">
-        <p style={{ fontWeight: 700, fontSize: "1.05rem", marginTop: 0 }}>Avez-vous eu des changements ce mois-ci ?</p>
-        <div className="segmented">
-          <button
-            type="button"
-            className={`seg ${declaration.hasChanges === false ? "selected" : ""}`}
-            disabled={!canEdit || busy}
-            onClick={() => handleHasChanges(false)}
-          >
-            Non, rien n'a changé
-          </button>
-          <button
-            type="button"
-            className={`seg ${declaration.hasChanges === true ? "selected" : ""}`}
-            disabled={!canEdit || busy}
-            onClick={() => handleHasChanges(true)}
-          >
-            Oui, il y a eu des changements
-          </button>
+      {!locked && (
+        <div className="card">
+          <p style={{ fontWeight: 700, fontSize: "1.05rem", marginTop: 0 }}>Avez-vous eu des changements ce mois-ci ?</p>
+          <div className="segmented">
+            <button
+              type="button"
+              className={`seg ${declaration.hasChanges === false ? "selected" : ""}`}
+              disabled={busy}
+              onClick={() => handleHasChanges(false)}
+            >
+              Non, rien n'a changé
+            </button>
+            <button
+              type="button"
+              className={`seg ${declaration.hasChanges === true ? "selected" : ""}`}
+              disabled={busy}
+              onClick={() => handleHasChanges(true)}
+            >
+              Oui, il y a eu des changements
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {canEdit && showForm && (
         <div className="card">
@@ -460,7 +477,9 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
       </details>
 
       <p style={{ textAlign: "center", marginTop: 24 }}>
-        <a href="/prof/historique">Voir l'historique de mes décomptes</a>
+        <a href="/prof/historique" className="btn secondary">
+          Voir l'historique
+        </a>
       </p>
     </main>
   );
