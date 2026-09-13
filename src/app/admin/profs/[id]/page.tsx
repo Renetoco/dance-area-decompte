@@ -3,17 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AdminRole } from "@prisma/client";
-import { formatPeriodLabel } from "@/lib/dates";
+import TeacherDeclarationsHistory from "@/components/TeacherDeclarationsHistory";
 
 const ROLE_LABELS: Record<string, string> = {
   ENSEIGNANT: "Enseignant·e",
   MUSICIEN: "Musicien·ne",
-};
-
-const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: "Non soumis", cls: "warning" },
-  SUBMITTED_MANUAL: { label: "Soumis", cls: "success" },
-  SUBMITTED_AUTO: { label: "Auto-soumis", cls: "neutral" },
 };
 
 const PARTICIPANT_ROLE_LABELS: Record<string, string> = {
@@ -130,36 +124,7 @@ export default async function FicheProfPage({ params }: { params: { id: string }
       )}
 
       <h2>Historique des déclarations ({teacher.declarations.length})</h2>
-      {teacher.declarations.length === 0 ? (
-        <p className="muted">Aucune déclaration pour l'instant.</p>
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Période</th>
-                <th>Statut</th>
-                <th>Changements</th>
-                <th>Soumis le</th>
-                <th>Lignes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {teacher.declarations.map((d) => (
-                <tr key={d.id}>
-                  <td>{formatPeriodLabel(d.period)}</td>
-                  <td>
-                    <span className={`badge ${STATUS_LABELS[d.status].cls}`}>{STATUS_LABELS[d.status].label}</span>
-                  </td>
-                  <td>{d.hasChanges == null ? "—" : d.hasChanges ? "Oui" : "Non"}</td>
-                  <td>{d.submittedAt ? new Date(d.submittedAt).toLocaleString("fr-CH") : "—"}</td>
-                  <td>{d._count.items}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <TeacherDeclarationsHistory declarations={teacher.declarations} />
     </div>
   );
 }

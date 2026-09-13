@@ -43,3 +43,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   return NextResponse.json({ declaration });
 }
+
+// Efface complètement une déclaration (ex. test, erreur de saisie) — les
+// changements qu'elle contient sont supprimés avec elle (cascade). Une
+// déclaration vierge est recréée automatiquement dès que le prof revient
+// sur son écran de décompte pour cette période.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const admin = await requireAdmin([AdminRole.ADMIN]);
+  if (!admin) return NextResponse.json({ error: "Réservé à l'administrateur." }, { status: 403 });
+
+  const declaration = await prisma.monthlyDeclaration.findUnique({ where: { id: params.id } });
+  if (!declaration) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
+
+  await prisma.monthlyDeclaration.delete({ where: { id: params.id } });
+  return NextResponse.json({ ok: true });
+}

@@ -108,6 +108,10 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
     if (value === false && declaration.items.length > 0) {
       if (!confirm("Cela supprimera les changements déjà saisis. Continuer ?")) return;
     }
+    // Dès qu'on répond « Oui » pour la première fois (aucun changement
+    // saisi pour l'instant), on ouvre directement le formulaire d'ajout —
+    // évite le clic supplémentaire sur « + Ajouter un changement ».
+    const openFormAfter = value === true && declaration.items.length === 0;
     setBusy(true);
     setError(null);
     try {
@@ -121,6 +125,10 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         return;
       }
       await refresh();
+      if (openFormAfter) {
+        setForm(emptyForm);
+        setShowForm("new");
+      }
     } finally {
       setBusy(false);
     }
@@ -234,64 +242,14 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         </p>
       </div>
 
-      <div className="card">
-        <p style={{ fontWeight: 700, fontSize: "1.05rem", marginTop: 0 }}>Vos cours ce mois-ci</p>
-        {bundle.myCourses.length === 0 ? (
-          <p className="muted">Aucun cours ne vous est rattaché comme titulaire pour l'instant.</p>
-        ) : (
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {bundle.myCourses.map((c) => (
-              <li
-                key={c.id}
-                style={{
-                  padding: "8px 0",
-                  borderTop: "1px solid var(--glass-border)",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 8,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span>
-                  {c.nomCours} <span className="muted">({c.code})</span>
-                </span>
-                <span className="muted">
-                  {c.jour ? `${c.jour}${c.heureDebut ? ` — ${c.heureDebut}${c.heureFin ? `–${c.heureFin}` : ""}` : ""}` : "—"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
       {error && <div className="error-msg">{error}</div>}
-
-      <div className="card">
-        <p style={{ fontWeight: 700, fontSize: "1.05rem" }}>Avez-vous eu des changements ce mois-ci ?</p>
-        <div className="segmented">
-          <button
-            type="button"
-            className={`seg ${declaration.hasChanges === false ? "selected" : ""}`}
-            disabled={!canEdit || busy}
-            onClick={() => handleHasChanges(false)}
-          >
-            Non, rien n'a changé
-          </button>
-          <button
-            type="button"
-            className={`seg ${declaration.hasChanges === true ? "selected" : ""}`}
-            disabled={!canEdit || busy}
-            onClick={() => handleHasChanges(true)}
-          >
-            Oui, il y a eu des changements
-          </button>
-        </div>
-      </div>
 
       {declaration.hasChanges === true && (
         <div className="card">
-          <h2 style={{ marginTop: 0 }}>Changements déclarés</h2>
-          {declaration.items.length === 0 && <p className="muted">Aucun changement ajouté pour l'instant.</p>}
+          <h2 style={{ marginTop: 0 }}>Changements déclarés ce mois-ci</h2>
+          {declaration.items.length === 0 && showForm !== "new" && (
+            <p className="muted">Aucun changement ajouté pour l'instant.</p>
+          )}
           {declaration.items.map((item) => (
             <div key={item.id} className="card nested">
               <p style={{ fontWeight: 600, margin: 0 }}>{TYPE_LABELS[item.type]}</p>
@@ -329,6 +287,28 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
           )}
         </div>
       )}
+
+      <div className="card">
+        <p style={{ fontWeight: 700, fontSize: "1.05rem", marginTop: 0 }}>Avez-vous eu des changements ce mois-ci ?</p>
+        <div className="segmented">
+          <button
+            type="button"
+            className={`seg ${declaration.hasChanges === false ? "selected" : ""}`}
+            disabled={!canEdit || busy}
+            onClick={() => handleHasChanges(false)}
+          >
+            Non, rien n'a changé
+          </button>
+          <button
+            type="button"
+            className={`seg ${declaration.hasChanges === true ? "selected" : ""}`}
+            disabled={!canEdit || busy}
+            onClick={() => handleHasChanges(true)}
+          >
+            Oui, il y a eu des changements
+          </button>
+        </div>
+      </div>
 
       {canEdit && showForm && (
         <div className="card">
@@ -446,6 +426,38 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
           Ajoutez au moins un changement, ou choisissez « Non, rien n'a changé » ci-dessus.
         </p>
       )}
+
+      <details className="card">
+        <summary style={{ fontWeight: 700, fontSize: "1.05rem", cursor: "pointer" }}>Vos cours ce mois-ci</summary>
+        <div style={{ marginTop: 12 }}>
+          {bundle.myCourses.length === 0 ? (
+            <p className="muted">Aucun cours ne vous est rattaché comme titulaire pour l'instant.</p>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {bundle.myCourses.map((c) => (
+                <li
+                  key={c.id}
+                  style={{
+                    padding: "8px 0",
+                    borderTop: "1px solid var(--glass-border)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span>
+                    {c.nomCours} <span className="muted">({c.code})</span>
+                  </span>
+                  <span className="muted">
+                    {c.jour ? `${c.jour}${c.heureDebut ? ` — ${c.heureDebut}${c.heureFin ? `–${c.heureFin}` : ""}` : ""}` : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </details>
 
       <p style={{ textAlign: "center", marginTop: 24 }}>
         <a href="/prof/historique">Voir l'historique de mes décomptes</a>
