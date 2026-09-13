@@ -79,6 +79,49 @@ function dureeCoursEnHeures(course: Course | null | undefined): number | null {
   return Math.round((diffMinutes / 60) * 100) / 100;
 }
 
+const JOUR_VERS_INDEX: Record<string, number> = {
+  Dimanche: 0,
+  Lundi: 1,
+  Mardi: 2,
+  Mercredi: 3,
+  Jeudi: 4,
+  Vendredi: 5,
+  Samedi: 6,
+};
+
+/**
+ * Devine la date la plus probable d'une séance du cours choisi, au sein de
+ * la période en cours (le 1 au 20 du mois) — cherche toutes les occurrences
+ * du jour de la semaine du cours dans cette fenêtre, et retient celle la
+ * plus proche d'aujourd'hui (avant ou après). Reste modifiable ensuite ;
+ * renvoie null si le cours n'a pas de jour fixe (ex. "packs" Etudes/SAE).
+ */
+function dateAutoPourCours(course: Course | null | undefined, period: string): string | null {
+  if (!course || !course.jour) return null;
+  const jourIndex = JOUR_VERS_INDEX[course.jour];
+  if (jourIndex === undefined) return null;
+
+  const [yearStr, monthStr] = period.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr); // 1-12
+  if (!year || !month) return null;
+
+  const aujourdhui = new Date();
+  let meilleure: { date: Date; ecart: number } | null = null;
+  for (let jourDuMois = 1; jourDuMois <= 20; jourDuMois++) {
+    const candidat = new Date(year, month - 1, jourDuMois);
+    if (candidat.getDay() !== jourIndex) continue;
+    const ecart = Math.abs(candidat.getTime() - aujourdhui.getTime());
+    if (!meilleure || ecart < meilleure.ecart) meilleure = { date: candidat, ecart };
+  }
+  if (!meilleure) return null;
+
+  const y = meilleure.date.getFullYear();
+  const m = String(meilleure.date.getMonth() + 1).padStart(2, "0");
+  const d = String(meilleure.date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 const emptyForm = {
   type: "REMPLACEMENT_EFFECTUE" as ChangeType,
   courseId: "",
@@ -347,12 +390,15 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
               const courseId = e.target.value;
               const course = allCourses.find((c) => c.id === courseId) ?? null;
               const dureeAuto = dureeCoursEnHeures(course);
+              const dateAuto = dateAutoPourCours(course, bundle.period);
               setForm({
                 ...form,
                 courseId,
-                // Pré-rempli automatiquement selon l'horaire du cours choisi ;
-                // reste modifiable si la durée réelle a été différente.
+                // Pré-remplies automatiquement selon le cours choisi (horaire,
+                // jour de la semaine le plus proche dans la période) ; restent
+                // modifiables si besoin.
                 hours: dureeAuto != null ? String(dureeAuto) : form.hours,
+                date: dateAuto ?? form.date,
               });
             }}
           >
@@ -373,7 +419,12 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             </optgroup>
           </select>
 
-          <label>Date</label>
+          <label>
+            Date{" "}
+            <span className="muted" style={{ fontWeight: 400 }}>
+              (pré-remplie selon le jour habituel du cours choisi, modifiable)
+            </span>
+          </label>
           <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
 
           <label>Autre prof concerné (qui a remplacé / qui a été remplacé)</label>
