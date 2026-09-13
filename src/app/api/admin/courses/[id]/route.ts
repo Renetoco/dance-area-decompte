@@ -46,3 +46,29 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const { declarationItems, ...courseFields } = course;
   return NextResponse.json({ course: { ...courseFields, history } });
 }
+
+// Supprime définitivement un cours — réservé aux cours sans aucun
+// changement déclaré dessus (créés par erreur, doublon, etc.). Les
+// participant·es supplémentaires (musicien·nes, co-profs) sont retiré·es en
+// même temps, mais dès qu'un changement a été déclaré sur ce cours, la
+// suppression est refusée pour ne jamais perdre d'historique.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const admin = await requireAdmin([AdminRole.ADMIN]);
+  if (!admin) return NextResponse.json({ error: "Réservé à l'administrateur." }, { status: 403 });
+
+  const course = await prisma.course.findUnique({
+    where: { id: params.id },
+    select: { id: true, _count: { select: { declarationItems: true } } },
+  });
+  if (!course) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
+
+  if (course._count.declarationItems > 0) {
+    return NextResponse.json(
+      { error: "Impossible de supprimer : des changements ont déjà été déclarés sur ce cours." },
+      { status: 409 }
+    );
+  }
+
+  await prisma.course.delete({ where: { id: params.id } });
+  return NextResponse.json({ ok: true });
+}

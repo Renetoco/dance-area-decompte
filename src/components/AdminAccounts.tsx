@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-type AdminAccount = { id: string; name: string; email: string; role: "ADMIN" | "COMPTABILITE" | "DIRECTION"; active: boolean };
+type AdminAccount = {
+  id: string;
+  name: string;
+  email: string;
+  role: "ADMIN" | "COMPTABILITE" | "DIRECTION";
+  active: boolean;
+  protected: boolean;
+};
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Administrateur",
@@ -19,6 +26,7 @@ export default function AdminAccounts() {
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [emailDrafts, setEmailDrafts] = useState<Record<string, string>>({});
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   async function load() {
     const res = await fetch("/api/admin/admins");
@@ -90,15 +98,45 @@ export default function AdminAccounts() {
 
   async function toggleActive(a: AdminAccount) {
     setBusyId(a.id);
+    setMessage(null);
     try {
-      await fetch(`/api/admin/admins/${a.id}`, {
+      const res = await fetch(`/api/admin/admins/${a.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ active: !a.active }),
       });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Échec de la mise à jour du statut.");
+        return;
+      }
       await load();
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function supprimerCompte(a: AdminAccount) {
+    if (confirmDeleteId !== a.id) {
+      // Étape de sécurité : un premier clic demande confirmation, le
+      // deuxième clic supprime réellement.
+      setConfirmDeleteId(a.id);
+      return;
+    }
+    setBusyId(a.id);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/admins/${a.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Échec de la suppression.");
+        return;
+      }
+      setMessage(`Compte de ${a.name} supprimé.`);
+      await load();
+    } finally {
+      setBusyId(null);
+      setConfirmDeleteId(null);
     }
   }
 
@@ -148,14 +186,42 @@ export default function AdminAccounts() {
                   </td>
                   <td>{ROLE_LABELS[a.role]}</td>
                   <td>
-                    <span className={`badge ${a.active ? "success" : "neutral"}`}>
-                      {a.active ? "Actif" : "Désactivé"}
-                    </span>
+                    {a.protected ? (
+                      <span className="badge info">Compte protégé</span>
+                    ) : (
+                      <span className={`badge ${a.active ? "success" : "neutral"}`}>
+                        {a.active ? "Actif" : "Désactivé"}
+                      </span>
+                    )}
                   </td>
                   <td>
-                    <button className="btn secondary small" disabled={busyId === a.id} onClick={() => toggleActive(a)}>
-                      {a.active ? "Désactiver" : "Réactiver"}
-                    </button>
+                    {a.protected ? (
+                      <span
+                        className="muted"
+                        style={{ fontSize: "0.8rem" }}
+                        title="Ce compte ne peut être ni désactivé, ni supprimé, par personne"
+                      >
+                        Non désactivable / non supprimable
+                      </span>
+                    ) : (
+                      <div className="btn-row">
+                        <button className="btn secondary small" disabled={busyId === a.id} onClick={() => toggleActive(a)}>
+                          {a.active ? "Désactiver" : "Réactiver"}
+                        </button>
+                        <button
+                          className="btn danger small"
+                          disabled={busyId === a.id}
+                          onClick={() => supprimerCompte(a)}
+                        >
+                          {confirmDeleteId === a.id ? "Confirmer la suppression ?" : "Supprimer"}
+                        </button>
+                        {confirmDeleteId === a.id && (
+                          <button className="btn secondary small" onClick={() => setConfirmDeleteId(null)}>
+                            Annuler
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               );

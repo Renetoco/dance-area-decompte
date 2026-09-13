@@ -99,3 +99,44 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // directement même si l'email de bienvenue échoue.
   return NextResponse.json({ teacher: updated, tempPassword, emailSent });
 }
+
+// Supprime définitivement un prof — réservé aux profs qui n'ont encore
+// aucune trace dans le système (créés par erreur, doublon, etc.). Dès qu'il
+// y a le moindre historique (cours, déclaration, intervention comme
+// musicien·ne, citation dans la déclaration d'un·e collègue), la suppression
+// est refusée pour ne jamais perdre de données : on désactive à la place.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const admin = await requireAdmin([AdminRole.ADMIN]);
+  if (!admin) return NextResponse.json({ error: "Réservé à l'administrateur." }, { status: 403 });
+
+  const teacher = await prisma.teacher.findUnique({
+    where: { id: params.id },
+    select: {
+      id: true,
+      _count: {
+        select: {
+          courses: true,
+          declarations: true,
+          courseParticipations: true,
+          reminderLogs: true,
+          citedInItems: true,
+        },
+      },
+    },
+  });
+  if (!teacher) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
+
+  const { courses, declarations, courseParticipations, reminderLogs, citedInItems } = teacher._count;
+  if (courses + declarations + courseParticipations + reminderLogs + citedInItems > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Impossible de supprimer : ce prof a des cours ou un historique de déclarations rattachés. Désactivez-le plutôt.",
+      },
+      { status: 409 }
+    );
+  }
+
+  await prisma.teacher.delete({ where: { id: params.id } });
+  return NextResponse.json({ ok: true });
+}

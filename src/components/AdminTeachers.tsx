@@ -26,6 +26,12 @@ export default function AdminTeachers() {
   const [emailDrafts, setEmailDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newCode, setNewCode] = useState("");
+  const [newRole, setNewRole] = useState<TeacherRole>("ENSEIGNANT");
+  const [addBusy, setAddBusy] = useState(false);
 
   async function load() {
     const res = await fetch("/api/admin/teachers");
@@ -134,6 +140,56 @@ export default function AdminTeachers() {
     }
   }
 
+  async function ajouterProf(e: React.FormEvent) {
+    e.preventDefault();
+    setAddBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/teachers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName, analyticCode: newCode, role: newRole }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Échec de la création.");
+        return;
+      }
+      setMessage(`${newName} a été ajouté·e. Renseignez son email ci-dessous puis cliquez sur « Activer » pour lui envoyer ses identifiants.`);
+      setNewName("");
+      setNewCode("");
+      setNewRole("ENSEIGNANT");
+      setShowAddForm(false);
+      await load();
+    } finally {
+      setAddBusy(false);
+    }
+  }
+
+  async function supprimerProf(t: Teacher) {
+    if (confirmDeleteId !== t.id) {
+      // Étape de sécurité : un premier clic demande confirmation, le
+      // deuxième clic supprime réellement.
+      setConfirmDeleteId(t.id);
+      return;
+    }
+    setBusyId(t.id);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/teachers/${t.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Échec de la suppression.");
+        return;
+      }
+      setMessage(`${t.name} a été supprimé·e.`);
+      await load();
+    } finally {
+      setBusyId(null);
+      setConfirmDeleteId(null);
+    }
+  }
+
   return (
     <div>
       {message && <div className="success-msg">{message}</div>}
@@ -215,6 +271,14 @@ export default function AdminTeachers() {
                       <button className="btn secondary small" disabled={busyId === t.id} onClick={() => toggleActive(t)}>
                         {t.active ? "Désactiver" : "Réactiver"}
                       </button>
+                      <button className="btn danger small" disabled={busyId === t.id} onClick={() => supprimerProf(t)}>
+                        {confirmDeleteId === t.id ? "Confirmer ?" : "Supprimer"}
+                      </button>
+                      {confirmDeleteId === t.id && (
+                        <button className="btn secondary small" onClick={() => setConfirmDeleteId(null)}>
+                          Annuler
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -222,6 +286,46 @@ export default function AdminTeachers() {
             })}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        {!showAddForm ? (
+          <button className="btn secondary" onClick={() => setShowAddForm(true)}>
+            + Ajouter un prof
+          </button>
+        ) : (
+          <form onSubmit={ajouterProf} className="card nested">
+            <h3 style={{ marginTop: 0, fontSize: "0.9rem" }}>Ajouter un nouveau prof</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Le prof est ajouté·e sans compte pour l'instant : renseignez ensuite son email dans le tableau
+              ci-dessus et cliquez sur « Activer » pour lui envoyer ses identifiants.
+            </p>
+            <div className="btn-row">
+              <input placeholder="Nom complet" value={newName} onChange={(e) => setNewName(e.target.value)} required />
+              <input
+                placeholder="Code analytique (ex. 3490)"
+                value={newCode}
+                onChange={(e) => setNewCode(e.target.value)}
+                required
+              />
+            </div>
+            <select value={newRole} onChange={(e) => setNewRole(e.target.value as TeacherRole)} style={{ marginTop: 8 }}>
+              {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <div className="btn-row" style={{ marginTop: 10 }}>
+              <button type="button" className="btn secondary" onClick={() => setShowAddForm(false)}>
+                Annuler
+              </button>
+              <button className="btn" disabled={addBusy}>
+                Ajouter
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

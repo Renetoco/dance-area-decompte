@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin, generateTempPassword, hashPassword } from "@/lib/auth";
+import { requireAdmin, generateTempPassword, hashPassword, isProtectedAdminEmail } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/email";
 import { AdminRole } from "@prisma/client";
 
@@ -12,7 +12,9 @@ export async function GET() {
     orderBy: { name: "asc" },
     select: { id: true, name: true, email: true, role: true, active: true },
   });
-  return NextResponse.json({ admins });
+  return NextResponse.json({
+    admins: admins.map((a) => ({ ...a, protected: isProtectedAdminEmail(a.email) })),
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -38,7 +40,6 @@ export async function POST(req: NextRequest) {
       email: normalizedEmail,
       role,
       passwordHash: await hashPassword(tempPassword),
-      mustResetPwd: true,
     },
   });
 
