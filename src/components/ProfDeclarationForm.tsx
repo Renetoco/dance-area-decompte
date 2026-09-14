@@ -121,9 +121,12 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
   }
 
   async function handleHasChanges(value: boolean) {
-    if (value === false && declaration.items.length > 0) {
-      if (!confirm("Cela supprimera les changements déjà saisis. Continuer ?")) return;
-    }
+    // Le bouton "Non" est désactivé tant qu'il reste des entrées saisies
+    // (voir plus bas) — pas de suppression automatique en arrière-plan : le
+    // prof doit d'abord les effacer une par une (bouton "Supprimer" sur
+    // chaque entrée) pour éviter qu'un clic n'efface plusieurs déclarations
+    // sans que ce soit clairement voulu.
+    if (value === false && declaration.items.length > 0) return;
     // Dès qu'on répond « Oui » pour la première fois (aucun changement
     // saisi pour l'instant), on ouvre directement le formulaire d'ajout —
     // évite le clic supplémentaire sur « + Ajouter un changement ».
@@ -323,7 +326,12 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             <button
               type="button"
               className={`seg ${declaration.hasChanges === false ? "selected" : ""}`}
-              disabled={busy}
+              disabled={busy || declaration.items.length > 0}
+              title={
+                declaration.items.length > 0
+                  ? "Supprimez d'abord vos entrées ci-dessus pour pouvoir choisir « Non »"
+                  : undefined
+              }
               onClick={() => handleHasChanges(false)}
             >
               Non, rien n'a changé
@@ -337,6 +345,12 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
               Oui, il y a eu des changements
             </button>
           </div>
+          {declaration.items.length > 0 && (
+            <p className="muted" style={{ marginTop: 10, marginBottom: 0, fontSize: "0.85rem" }}>
+              Pour revenir sur « rien n'a changé », supprimez d'abord toutes vos entrées ci-dessus (bouton «
+              Supprimer » sur chaque entrée).
+            </p>
+          )}
         </div>
       )}
 
