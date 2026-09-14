@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { type, courseId, date, otherTeacherId, otherTeacherFreeText, hours, comment } = body;
+  const { type, courseId, date, otherTeacherId, otherTeacherFreeText, comment } = body;
 
   if (!type || !(type in ChangeType)) {
     return NextResponse.json({ error: "Type de changement invalide." }, { status: 400 });
@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
       date: date ? new Date(date) : null,
       otherTeacherId: otherTeacherId || null,
       otherTeacherFreeText: otherTeacherFreeText || null,
-      hours: hours != null && hours !== "" ? Number(hours) : null,
       comment: comment || null,
     },
     include: { course: true, otherTeacher: { select: { id: true, name: true } } },

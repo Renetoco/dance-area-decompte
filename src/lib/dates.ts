@@ -119,3 +119,46 @@ export function formatDeadlineLabel(period: string): string {
   ];
   return `${DEADLINE_DAY} ${moisNoms[month - 1]} ${year} à ${DEADLINE_HOUR}h00`;
 }
+
+/** Jour de la semaine (tel qu'écrit dans Course.jour) -> index JS (0 = dimanche). */
+export const JOUR_VERS_INDEX: Record<string, number> = {
+  Dimanche: 0,
+  Lundi: 1,
+  Mardi: 2,
+  Mercredi: 3,
+  Jeudi: 4,
+  Vendredi: 5,
+  Samedi: 6,
+};
+
+/**
+ * Renvoie les dates (format "YYYY-MM-DD") de toutes les occurrences d'un
+ * jour de la semaine entre le 1er et le DEADLINE_DAY (20) du mois d'une
+ * période "YYYY-MM" — c'est le calendrier prévisionnel du décompte par
+ * cours pour la paie (l'école compte en cours, pas en heures : voir
+ * project/contexte/regles-metier.md). Un cours sans jour fixe (ex. "packs"
+ * Etudes/SAE) renvoie un tableau vide — à signaler à part par l'appelant
+ * plutôt que silencieusement ignoré.
+ */
+export function occurrenceDatesInPeriod(jour: string | null | undefined, period: string): string[] {
+  if (!jour) return [];
+  const jourIndex = JOUR_VERS_INDEX[jour];
+  if (jourIndex === undefined) return [];
+
+  const { year, month } = periodToYearMonth(period);
+  const dates: string[] = [];
+  for (let jourDuMois = 1; jourDuMois <= DEADLINE_DAY; jourDuMois++) {
+    const candidat = new Date(year, month - 1, jourDuMois);
+    if (candidat.getDay() !== jourIndex) continue;
+    const y = candidat.getFullYear();
+    const m = String(candidat.getMonth() + 1).padStart(2, "0");
+    const d = String(candidat.getDate()).padStart(2, "0");
+    dates.push(`${y}-${m}-${d}`);
+  }
+  return dates;
+}
+
+/** Compte le nombre d'occurrences — voir {@link occurrenceDatesInPeriod}. */
+export function countWeekdayOccurrencesInPeriod(jour: string | null | undefined, period: string): number {
+  return occurrenceDatesInPeriod(jour, period).length;
+}

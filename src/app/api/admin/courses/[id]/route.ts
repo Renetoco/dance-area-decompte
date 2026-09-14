@@ -38,7 +38,6 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       date: item.date,
       otherTeacher: item.otherTeacher,
       otherTeacherFreeText: item.otherTeacherFreeText,
-      hours: item.hours,
       comment: item.comment,
     }))
     .sort((a, b) => (a.period === b.period ? 0 : a.period < b.period ? 1 : -1));

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { JOUR_VERS_INDEX } from "@/lib/dates";
 
 type ChangeType = "REMPLACEMENT_EFFECTUE" | "ABSENCE_REMPLACEE" | "ABSENCE_NON_REMPLACEE" | "AUTRE";
 type DeclarationStatus = "DRAFT" | "SUBMITTED_MANUAL" | "SUBMITTED_AUTO";
@@ -33,7 +34,6 @@ type Item = {
   otherTeacherId: string | null;
   otherTeacher: Teacher | null;
   otherTeacherFreeText: string | null;
-  hours: number | null;
   comment: string | null;
 };
 
@@ -61,32 +61,6 @@ const STATUS_BADGE: Record<DeclarationStatus, { label: string; cls: string }> = 
   DRAFT: { label: "Brouillon — pas encore soumis", cls: "warning" },
   SUBMITTED_MANUAL: { label: "Envoyée", cls: "success" },
   SUBMITTED_AUTO: { label: "Envoyée automatiquement (délai dépassé)", cls: "neutral" },
-};
-
-/**
- * Calcule la durée d'un cours (en heures, ex. 1.25) à partir de ses horaires
- * "HH:MM" — sert à pré-remplir le champ Heures dès qu'un cours est
- * sélectionné, pour éviter au prof de le recalculer à la main. Renvoie
- * null si le cours n'a pas d'horaire défini (ex. "packs" Etudes/SAE).
- */
-function dureeCoursEnHeures(course: Course | null | undefined): number | null {
-  if (!course || !course.heureDebut || !course.heureFin) return null;
-  const [h1, m1] = course.heureDebut.split(":").map(Number);
-  const [h2, m2] = course.heureFin.split(":").map(Number);
-  if ([h1, m1, h2, m2].some((n) => Number.isNaN(n))) return null;
-  let diffMinutes = h2 * 60 + m2 - (h1 * 60 + m1);
-  if (diffMinutes <= 0) diffMinutes += 24 * 60; // cas rare, passage après minuit
-  return Math.round((diffMinutes / 60) * 100) / 100;
-}
-
-const JOUR_VERS_INDEX: Record<string, number> = {
-  Dimanche: 0,
-  Lundi: 1,
-  Mardi: 2,
-  Mercredi: 3,
-  Jeudi: 4,
-  Vendredi: 5,
-  Samedi: 6,
 };
 
 /**
@@ -128,7 +102,6 @@ const emptyForm = {
   date: "",
   otherTeacherId: "",
   otherTeacherFreeText: "",
-  hours: "",
   comment: "",
 };
 
@@ -189,7 +162,6 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
       date: item.date ? item.date.slice(0, 10) : "",
       otherTeacherId: item.otherTeacherId ?? "",
       otherTeacherFreeText: item.otherTeacherFreeText ?? "",
-      hours: item.hours != null ? String(item.hours) : "",
       comment: item.comment ?? "",
     });
     setShowForm(item.id);
@@ -205,7 +177,6 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         date: form.date || null,
         otherTeacherId: form.otherTeacherId || null,
         otherTeacherFreeText: form.otherTeacherId ? null : form.otherTeacherFreeText || null,
-        hours: form.hours || null,
         comment: form.comment || null,
       };
       const url = showForm === "new" ? "/api/declarations/items" : `/api/declarations/items/${showForm}`;
@@ -323,7 +294,6 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
                   Autre prof : {item.otherTeacher?.name ?? item.otherTeacherFreeText}
                 </p>
               )}
-              {item.hours != null && <p className="muted" style={{ margin: "4px 0" }}>Heures : {item.hours}</p>}
               {item.comment && <p className="muted" style={{ margin: "4px 0" }}>Commentaire : {item.comment}</p>}
               {canEdit && (
                 <div className="btn-row" style={{ marginTop: 8 }}>
@@ -389,15 +359,13 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             onChange={(e) => {
               const courseId = e.target.value;
               const course = allCourses.find((c) => c.id === courseId) ?? null;
-              const dureeAuto = dureeCoursEnHeures(course);
               const dateAuto = dateAutoPourCours(course, bundle.period);
               setForm({
                 ...form,
                 courseId,
-                // Pré-remplies automatiquement selon le cours choisi (horaire,
-                // jour de la semaine le plus proche dans la période) ; restent
-                // modifiables si besoin.
-                hours: dureeAuto != null ? String(dureeAuto) : form.hours,
+                // Pré-remplie automatiquement selon le jour de la semaine du
+                // cours choisi, le plus proche dans la période ; reste
+                // modifiable si besoin.
                 date: dateAuto ?? form.date,
               });
             }}
@@ -447,20 +415,6 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
               style={{ marginTop: 6 }}
             />
           )}
-
-          <label>
-            Heures{" "}
-            <span className="muted" style={{ fontWeight: 400 }}>
-              (pré-rempli selon l'horaire du cours choisi, modifiable)
-            </span>
-          </label>
-          <input
-            type="number"
-            step="0.25"
-            min="0"
-            value={form.hours}
-            onChange={(e) => setForm({ ...form, hours: e.target.value })}
-          />
 
           <label>Commentaire (facultatif)</label>
           <textarea

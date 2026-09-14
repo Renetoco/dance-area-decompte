@@ -67,6 +67,7 @@ export default function AdminDashboard() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,11 +82,31 @@ export default function AdminDashboard() {
         setDeclarations(data.declarations);
         setMissing(data.missingTeachers);
         setSummary(data.summary);
+        setSelected(new Set()); // la sélection ne survit pas à un changement de filtre
       }
     } finally {
       setLoading(false);
     }
   }, [period, status, hasChanges, q]);
+
+  function toggleSelected(teacherId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(teacherId)) next.delete(teacherId);
+      else next.add(teacherId);
+      return next;
+    });
+  }
+
+  // Tous les profs dont le compte est actif pour cette période : ceux qui
+  // ont déjà une déclaration (tableau principal) + ceux qui n'en ont pas
+  // encore (liste "sans déclaration" plus bas) — voir /api/admin/declarations
+  // où `missingTeachers` est déjà défini comme "profs actifs sans déclaration".
+  const allActiveIds = [...declarations.map((d) => d.teacher.id), ...missing.map((t) => t.id)];
+
+  function toggleSelectAll() {
+    setSelected((prev) => (prev.size === allActiveIds.length ? new Set() : new Set(allActiveIds)));
+  }
 
   useEffect(() => {
     fetch("/api/admin/me")
@@ -108,7 +129,7 @@ export default function AdminDashboard() {
     if (res.ok) setDetail((await res.json()).declaration);
   }
 
-  const canExportCsv = role === "ADMIN" || role === "COMPTABILITE";
+  const canExport = role === "ADMIN" || role === "COMPTABILITE";
 
   return (
     <div>
@@ -126,12 +147,45 @@ export default function AdminDashboard() {
           <option value="false">Sans changement</option>
         </select>
         <input placeholder="Rechercher un prof..." value={q} onChange={(e) => setQ(e.target.value)} />
-        {canExportCsv && (
-          <a className="btn small" href={`/api/admin/export-csv?period=${period}`}>
-            Exporter le CSV
+        {canExport && (
+          <a className="btn small" href={`/api/admin/export-xlsx?period=${period}`}>
+            Exporter tout (Excel)
           </a>
         )}
+        {canExport && (
+          <button
+            type="button"
+            className="btn small secondary"
+            disabled={selected.size === 0}
+            title={selected.size === 0 ? "Cochez au moins un prof ci-dessous" : undefined}
+            onClick={() => {
+              const params = new URLSearchParams({ period, teacherIds: Array.from(selected).join(",") });
+              window.location.href = `/api/admin/export-xlsx?${params}`;
+            }}
+          >
+            Exporter la sélection ({selected.size}) (Excel)
+          </button>
+        )}
       </div>
+
+      {canExport && allActiveIds.length > 0 && (
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: "0.85rem",
+            margin: "8px 0 0",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={selected.size === allActiveIds.length}
+            onChange={toggleSelectAll}
+          />
+          Tout sélectionner ({allActiveIds.length} profs actifs)
+        </label>
+      )}
 
       {summary && (
         <div className="card" style={{ marginBottom: 16 }}>
@@ -177,6 +231,7 @@ export default function AdminDashboard() {
         <table>
           <thead>
             <tr>
+              {canExport && <th></th>}
               <th></th>
               <th>Prof</th>
               <th>Code</th>
@@ -190,6 +245,15 @@ export default function AdminDashboard() {
             {declarations.map((d) => (
               <Fragment key={d.id}>
                 <tr className="is-clickable" onClick={() => toggleExpand(d.id)}>
+                  {canExport && (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(d.teacher.id)}
+                        onChange={() => toggleSelected(d.teacher.id)}
+                      />
+                    </td>
+                  )}
                   <td>{expanded === d.id ? "▾" : "▸"}</td>
                   <td>
                     <Link href={`/admin/profs/${d.teacher.id}`} onClick={(e) => e.stopPropagation()}>
@@ -206,14 +270,13 @@ export default function AdminDashboard() {
                 </tr>
                 {expanded === d.id && detail && (
                   <tr className="detail-row">
-                    <td colSpan={7}>
+                    <td colSpan={canExport ? 8 : 7}>
                       {detail.items.length === 0 && <p className="muted">Aucune ligne de changement.</p>}
                       {detail.items.map((item: any) => (
                         <div key={item.id} className="detail-item">
                           <strong>{TYPE_LABELS[item.type]}</strong>
                           {item.course ? ` — ${item.course.nomCours} (${item.course.code})` : ""}
                           {item.date ? ` — ${item.date.slice(0, 10)}` : ""}
-                          {item.hours != null ? ` — ${item.hours}h` : ""}
                           {item.otherTeacher ? ` — avec ${item.otherTeacher.name}` : item.otherTeacherFreeText ? ` — avec ${item.otherTeacherFreeText}` : ""}
                           {item.comment ? ` — "${item.comment}"` : ""}
                           {item.concordance?.status !== "NON_APPLICABLE" && (
@@ -242,14 +305,31 @@ export default function AdminDashboard() {
           <p style={{ fontWeight: 600, margin: 0 }}>
             Professeurs sans déclaration pour cette période ({missing.length})
           </p>
-          <p className="muted" style={{ fontSize: "0.85rem" }}>
-            {missing.map((t, i) => (
-              <span key={t.id}>
+          <ul
+            style={{
+              listStyle: "none",
+              padding: 0,
+              margin: "8px 0 0",
+              display: "flex",
+              flexWrap: "wrap",
+              columnGap: 16,
+              rowGap: 4,
+            }}
+          >
+            {missing.map((t) => (
+              <li key={t.id} className="muted" style={{ fontSize: "0.85rem" }}>
+                {canExport && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(t.id)}
+                    onChange={() => toggleSelected(t.id)}
+                    style={{ marginRight: 6 }}
+                  />
+                )}
                 <Link href={`/admin/profs/${t.id}`}>{t.name}</Link>
-                {i < missing.length - 1 ? ", " : ""}
-              </span>
+              </li>
             ))}
-          </p>
+          </ul>
         </div>
       )}
     </div>

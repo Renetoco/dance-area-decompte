@@ -24,7 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const body = await req.json();
-  const { type, courseId, date, otherTeacherId, otherTeacherFreeText, hours, comment } = body;
+  const { type, courseId, date, otherTeacherId, otherTeacherFreeText, comment } = body;
 
   const item = await prisma.declarationItem.update({
     where: { id: params.id },
@@ -34,7 +34,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       date: date ? new Date(date) : null,
       otherTeacherId: otherTeacherId || null,
       otherTeacherFreeText: otherTeacherFreeText || null,
-      hours: hours != null && hours !== "" ? Number(hours) : null,
       comment: comment || null,
     },
     include: { course: true, otherTeacher: { select: { id: true, name: true } } },

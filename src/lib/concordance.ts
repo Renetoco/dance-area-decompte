@@ -81,12 +81,5 @@ export async function computeConcordance(itemId: string): Promise<ConcordanceRes
     };
   }
 
-  if (item.hours != null && match.hours != null && Math.abs(item.hours - match.hours) > 0.01) {
-    return {
-      status: "DISCORDANT",
-      detail: `Ligne trouvée mais heures différentes (${item.hours}h déclarées ici, ${match.hours}h déclarées par l'autre prof).`,
-    };
-  }
-
   return { status: "CONCORDANT", detail: "Les deux profs ont déclaré la même chose." };
 }
