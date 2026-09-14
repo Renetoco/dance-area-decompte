@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       await session.save();
       return NextResponse.json({
         ok: true,
-        redirect: admin.mustResetPwd ? "/admin/mot-de-passe" : "/admin",
+        redirect: admin.mustResetPwd ? "/admin-mot-de-passe" : "/admin",
       });
     }
   }
