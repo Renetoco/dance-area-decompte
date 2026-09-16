@@ -121,8 +121,9 @@ Deux types de comptes, avec la même mécanique de session (cookie signé,
   - `ADMIN` — accès complet : gestion des comptes (profs, comptabilité,
     direction, autres admins), gestion des cours, import annuel du
     planning, QR code, suppression de déclarations.
-  - `COMPTABILITE` — tableau de bord des déclarations + export CSV.
-  - `DIRECTION` — tableau de bord des déclarations (lecture).
+  - `COMPTABILITE` — tableau de bord des déclarations + export Excel.
+  - `DIRECTION` — tableau de bord des déclarations + export Excel (même
+    accès que `COMPTABILITE`, élargi le 16.09.2026 pour Anastasia).
 
 Deux comptes admin sont **protégés** dans le code (`isProtectedAdminEmail`
 dans `src/lib/auth.ts`) : `rene.torres@dancearea.ch` et
@@ -232,7 +233,8 @@ copié ces codes dans un gestionnaire de mots de passe — voir
   recherche) de toutes les déclarations, avec un indicateur de
   concordance (🟢/🔴/🟠/⚪) qui vérifie que les remplacements déclarés par
   un prof correspondent à ce que l'autre prof cité a lui-même déclaré.
-  Export CSV pour `ADMIN` et `COMPTABILITE`.
+  Export Excel (classeur complet ou sélection de profs cochés dans une
+  grille dédiée) pour `ADMIN`, `COMPTABILITE` et `DIRECTION`.
 - `/admin/cours` : gestion des cours (ajout, modification, désactivation,
   affectation d'un·e titulaire et de participant·es supplémentaires).
 - `/admin/administration` (réservé au rôle `ADMIN`) : QR code d'accès à

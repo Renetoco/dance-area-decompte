@@ -5,9 +5,10 @@ import { currentPeriod } from "@/lib/dates";
 import { AdminRole } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
-  // Export réservé à la comptabilité et à l'admin (pas la direction, cf.
-  // project/roles/roles-utilisateurs.md)
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE]);
+  // Export réservé à l'admin, la comptabilité et la direction (élargi à la
+  // direction à la demande de Rene le 16.09.2026, pour qu'Anastasia ait le
+  // même accès que la comptabilité).
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
   if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
 
   const { searchParams } = new URL(req.url);

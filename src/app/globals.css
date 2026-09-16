@@ -535,6 +535,35 @@ tbody tr.is-clickable:hover {
   margin-top: 3px;
 }
 
+/* ===== Sélecteur de profs pour l'export Excel (grille responsive) ===== */
+.teacher-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 2px 16px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.teacher-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 6px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.teacher-picker-item:hover {
+  background: var(--glass);
+}
+
+.teacher-picker-item.checked {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* ===== Petit graphique en barres horizontales (aperçu du tableau de bord) ===== */
 .metric-bars {
   display: flex;

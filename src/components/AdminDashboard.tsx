@@ -102,7 +102,12 @@ export default function AdminDashboard() {
   // ont déjà une déclaration (tableau principal) + ceux qui n'en ont pas
   // encore (liste "sans déclaration" plus bas) — voir /api/admin/declarations
   // où `missingTeachers` est déjà défini comme "profs actifs sans déclaration".
-  const allActiveIds = [...declarations.map((d) => d.teacher.id), ...missing.map((t) => t.id)];
+  // Triés par nom pour un sélecteur d'export lisible, indépendamment de
+  // l'ordre du tableau ou de la liste "sans déclaration".
+  const allActiveTeachers = [...declarations.map((d) => d.teacher), ...missing].sort((a, b) =>
+    a.name.localeCompare(b.name, "fr")
+  );
+  const allActiveIds = allActiveTeachers.map((t) => t.id);
 
   function toggleSelectAll() {
     setSelected((prev) => (prev.size === allActiveIds.length ? new Set() : new Set(allActiveIds)));
@@ -129,7 +134,7 @@ export default function AdminDashboard() {
     if (res.ok) setDetail((await res.json()).declaration);
   }
 
-  const canExport = role === "ADMIN" || role === "COMPTABILITE";
+  const canExport = role === "ADMIN" || role === "COMPTABILITE" || role === "DIRECTION";
 
   return (
     <div>
@@ -168,23 +173,37 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {canExport && allActiveIds.length > 0 && (
-        <label
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: "0.85rem",
-            margin: "8px 0 0",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={selected.size === allActiveIds.length}
-            onChange={toggleSelectAll}
-          />
-          Tout sélectionner ({allActiveIds.length} profs actifs)
-        </label>
+      {canExport && allActiveTeachers.length > 0 && (
+        <div className="card">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 8,
+              marginBottom: 4,
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Sélectionner les profs à exporter</h3>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.85rem", fontWeight: 700 }}>
+              <input type="checkbox" checked={selected.size === allActiveIds.length} onChange={toggleSelectAll} />
+              Tout sélectionner ({allActiveTeachers.length})
+            </label>
+          </div>
+          <p className="muted" style={{ marginTop: 0, marginBottom: 10, fontSize: "0.85rem" }}>
+            {selected.size} prof{selected.size !== 1 ? "s" : ""} sélectionné{selected.size !== 1 ? "s" : ""} pour «
+            Exporter la sélection ».
+          </p>
+          <div className="teacher-picker">
+            {allActiveTeachers.map((t) => (
+              <label key={t.id} className={`teacher-picker-item ${selected.has(t.id) ? "checked" : ""}`}>
+                <input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelected(t.id)} />
+                {t.name}
+              </label>
+            ))}
+          </div>
+        </div>
       )}
 
       {summary && (
@@ -231,7 +250,6 @@ export default function AdminDashboard() {
         <table>
           <thead>
             <tr>
-              {canExport && <th></th>}
               <th></th>
               <th>Prof</th>
               <th>Code</th>
@@ -245,15 +263,6 @@ export default function AdminDashboard() {
             {declarations.map((d) => (
               <Fragment key={d.id}>
                 <tr className="is-clickable" onClick={() => toggleExpand(d.id)}>
-                  {canExport && (
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(d.teacher.id)}
-                        onChange={() => toggleSelected(d.teacher.id)}
-                      />
-                    </td>
-                  )}
                   <td>{expanded === d.id ? "▾" : "▸"}</td>
                   <td>
                     <Link href={`/admin/profs/${d.teacher.id}`} onClick={(e) => e.stopPropagation()}>
@@ -270,7 +279,7 @@ export default function AdminDashboard() {
                 </tr>
                 {expanded === d.id && detail && (
                   <tr className="detail-row">
-                    <td colSpan={canExport ? 8 : 7}>
+                    <td colSpan={7}>
                       {detail.items.length === 0 && <p className="muted">Aucune ligne de changement.</p>}
                       {detail.items.map((item: any) => (
                         <div key={item.id} className="detail-item">
@@ -305,31 +314,14 @@ export default function AdminDashboard() {
           <p style={{ fontWeight: 600, margin: 0 }}>
             Professeurs sans déclaration pour cette période ({missing.length})
           </p>
-          <ul
-            style={{
-              listStyle: "none",
-              padding: 0,
-              margin: "8px 0 0",
-              display: "flex",
-              flexWrap: "wrap",
-              columnGap: 16,
-              rowGap: 4,
-            }}
-          >
-            {missing.map((t) => (
-              <li key={t.id} className="muted" style={{ fontSize: "0.85rem" }}>
-                {canExport && (
-                  <input
-                    type="checkbox"
-                    checked={selected.has(t.id)}
-                    onChange={() => toggleSelected(t.id)}
-                    style={{ marginRight: 6 }}
-                  />
-                )}
+          <p className="muted" style={{ fontSize: "0.85rem" }}>
+            {missing.map((t, i) => (
+              <span key={t.id}>
                 <Link href={`/admin/profs/${t.id}`}>{t.name}</Link>
-              </li>
+                {i < missing.length - 1 ? ", " : ""}
+              </span>
             ))}
-          </ul>
+          </p>
         </div>
       )}
     </div>
