@@ -49,23 +49,44 @@ async function ensureDeclarationsCreated(period: string, dateStr: string) {
   return { ran: true, created };
 }
 
-/** J-4 / J-2 / J-1 : rappel aux profs qui n'ont pas encore soumis manuellement. */
+/**
+ * J-4 / J-2 / J-1 : rappel aux profs qui n'ont pas encore soumis manuellement.
+ *
+ * J-4 et J-2 ne relancent que les profs dont la déclaration du mois est
+ * encore totalement vide (aucune réponse à "y a-t-il eu des changements ?",
+ * aucune entrée saisie) : dès qu'un prof a commencé à s'en occuper, inutile
+ * de le relancer. J-1, le dernier rappel avant la deadline, part à tous
+ * ceux qui n'ont pas encore soumis, même s'ils ont un brouillon en cours —
+ * c'est le dernier filet avant la clôture automatique (demande de Rene du
+ * 16.09.2026).
+ */
 async function sendDueReminders(period: string, dateStr: string, offset: number) {
   const jobKey = `${dateStr}:reminder`;
   if (await alreadyRan(jobKey)) return { ran: false };
+
+  const isFinalReminder = offset === 1;
 
   const notYetSubmitted = await prisma.teacher.findMany({
     where: {
       active: true,
       email: { not: null },
-      OR: [
-        { declarations: { none: { period } } },
-        {
-          declarations: {
-            some: { period, status: { not: DeclarationStatus.SUBMITTED_MANUAL } },
-          },
-        },
-      ],
+      OR: isFinalReminder
+        ? [
+            { declarations: { none: { period } } },
+            {
+              declarations: {
+                some: { period, status: { not: DeclarationStatus.SUBMITTED_MANUAL } },
+              },
+            },
+          ]
+        : [
+            { declarations: { none: { period } } },
+            {
+              declarations: {
+                some: { period, hasChanges: null, items: { none: {} } },
+              },
+            },
+          ],
     },
   });
 

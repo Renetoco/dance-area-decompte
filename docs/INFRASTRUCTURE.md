@@ -152,10 +152,10 @@ fois le même jour :
 | Moment (heure de Genève) | Action |
 |---|---|
 | Le 1er du mois | Crée une déclaration vierge (`DRAFT`) pour chaque prof actif |
-| Le 16 à 9h (J-4) | Envoie un rappel par email aux profs n'ayant pas encore soumis manuellement |
+| Le 16 à 9h (J-4) | Envoie un rappel par email aux profs dont la déclaration du mois est encore totalement vide (aucune entrée, aucune réponse à "y a-t-il eu des changements ?") |
 | Le 18 à 9h (J-2) | Idem |
-| Le 19 à 9h (J-1) | Idem |
-| Le 20 à 21h (deadline) | Verrouille toutes les déclarations non soumises manuellement, les marque `SUBMITTED_AUTO`, et notifie chaque prof par email |
+| Le 19 à 9h (J-1) | Dernier rappel : envoyé à tous les profs n'ayant pas encore soumis manuellement, même avec un brouillon en cours (dernier filet avant la clôture) |
+| Le 20 à 21h (date limite) | Verrouille toutes les déclarations non soumises manuellement, les marque `SUBMITTED_AUTO`, et notifie chaque prof par email |
 
 La période déclarée va donc **du 1er au 20 de chaque mois**. Après le 20
 à 21h, plus personne ne peut modifier sa déclaration du mois (sauf
@@ -170,7 +170,7 @@ Infomaniak, adresse d'expédition configurable via `MAIL_FROM`) :
    passe temporaire.
 2. **Réinitialisation** — après un "mot de passe oublié", nouveau mot de
    passe temporaire.
-3. **Rappel** (J-4 / J-2 / J-1) — avant la deadline.
+3. **Rappel** (J-4 / J-2 / J-1) — avant la date limite.
 4. **Notification de soumission automatique** — après la deadline, si la
    déclaration a été verrouillée sans action du prof.
 

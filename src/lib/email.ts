@@ -63,17 +63,23 @@ export async function sendReminderEmail(opts: {
     <p>Bonjour ${escapeHtml(teacherName)},</p>
     <p>Il reste <strong>${daysLeft} jour${daysLeft > 1 ? "s" : ""}</strong> pour soumettre
     votre décompte pour la période du ${formatPeriodLabel(period)}.</p>
-    <p>Si rien n'a changé sur votre planning, ça prend 10 secondes :
-    un seul bouton à cliquer.</p>
+    <p>Peut-être que ce mois-ci, rien n'a changé sur votre planning : dans ce
+    cas, un clic sur « Non, rien n'a changé » suffit. Vous pouvez aussi ne
+    rien faire du tout — votre décompte sera envoyé automatiquement à la
+    date limite, avec ce que vous aurez déjà saisi (ou « aucun changement »
+    si rien n'a été rempli).</p>
     <p style="margin: 24px 0;">
       <a href="${link}" style="background:#111;color:#fff;padding:12px 20px;
       border-radius:6px;text-decoration:none;">Accéder à mon décompte</a>
     </p>
-    <p>Passé le ${formatDeadlineLabel(period)}, votre décompte sera soumis
-    automatiquement avec les informations déjà saisies (ou "aucun
-    changement" si rien n'a été rempli).</p>
+    <p>Ces rappels sont automatiques : si vous préférez ne plus les
+    recevoir, il suffit d'envoyer votre décompte dès maintenant, même sans
+    changement. Sinon, un ou deux rappels vous parviendront encore dans les
+    derniers jours, simplement pour éviter un oubli.</p>
+    <p>Merci pour votre engagement auprès des élèves, et à très bientôt !<br/>
+    L'équipe Dance Area</p>
   `);
-  const text = `Bonjour ${teacherName},\n\nIl reste ${daysLeft} jour(s) pour soumettre votre décompte pour la période du ${formatPeriodLabel(period)}.\nAccédez à votre décompte : ${link}\n\nPassé le ${formatDeadlineLabel(period)}, votre décompte sera soumis automatiquement.`;
+  const text = `Bonjour ${teacherName},\n\nIl reste ${daysLeft} jour(s) pour soumettre votre décompte pour la période du ${formatPeriodLabel(period)}.\n\nPeut-être que ce mois-ci, rien n'a changé sur votre planning : dans ce cas, un clic sur « Non, rien n'a changé » suffit. Vous pouvez aussi ne rien faire du tout — votre décompte sera envoyé automatiquement à la date limite, avec ce que vous aurez déjà saisi (ou « aucun changement » si rien n'a été rempli).\n\nAccédez à votre décompte : ${link}\n\nCes rappels sont automatiques : si vous préférez ne plus les recevoir, il suffit d'envoyer votre décompte dès maintenant, même sans changement. Sinon, un ou deux rappels vous parviendront encore dans les derniers jours, simplement pour éviter un oubli.\n\nMerci pour votre engagement auprès des élèves, et à très bientôt !\nL'équipe Dance Area`;
   await send(to, subject, html, text);
 }
 
@@ -87,13 +93,14 @@ export async function sendAutoSubmitNotice(opts: {
   const subject = `Votre décompte de ${formatPeriodLabel(period)} a été soumis automatiquement`;
   const html = wrapHtml(`
     <p>Bonjour ${escapeHtml(teacherName)},</p>
-    <p>La deadline du ${formatDeadlineLabel(period)} est passée sans soumission
-    manuelle de votre part. Votre décompte a donc été soumis automatiquement
+    <p>La date limite du ${formatDeadlineLabel(period)} est passée sans
+    soumission manuelle de votre part. Votre décompte a donc été soumis
+    automatiquement
     ${hadChanges ? "avec les informations que vous aviez déjà saisies." : "avec la mention \"aucun changement\"."}</p>
     <p>Si une information est incorrecte, contactez l'administration de
     Dance Area au plus vite pour une correction.</p>
   `);
-  const text = `Bonjour ${teacherName},\n\nVotre décompte de ${formatPeriodLabel(period)} a été soumis automatiquement (deadline du ${formatDeadlineLabel(period)} dépassée). Contactez l'administration si une correction est nécessaire.`;
+  const text = `Bonjour ${teacherName},\n\nVotre décompte de ${formatPeriodLabel(period)} a été soumis automatiquement (date limite du ${formatDeadlineLabel(period)} dépassée). Contactez l'administration si une correction est nécessaire.`;
   await send(to, subject, html, text);
 }
 
