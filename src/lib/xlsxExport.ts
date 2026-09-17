@@ -87,10 +87,12 @@ function buildResumeSheet(workbook: ExcelJS.Workbook, rows: PayrollTeacherRow[])
     { header: "Total cours du mois", key: "total", width: 18 },
     { header: "Cours sans jour fixe (à vérifier manuellement)", key: "sansJour", width: 34 },
     { header: "Lignes à vérifier", key: "aVerifier", width: 16 },
+    { header: "Décompte modifié ?", key: "modifie", width: 20 },
+    { header: "Entrées tardives", key: "tardif", width: 16 },
     { header: "Statut de la déclaration", key: "statut", width: 28 },
   ];
   resume.getRow(1).font = HEADER_FONT;
-  resume.autoFilter = { from: "A1", to: "I1" };
+  resume.autoFilter = { from: "A1", to: "K1" };
 
   for (const r of rows) {
     resume.addRow({
@@ -102,6 +104,13 @@ function buildResumeSheet(workbook: ExcelJS.Workbook, rows: PayrollTeacherRow[])
       total: r.totalFinal,
       sansJour: r.coursesSansJourFixe || "",
       aVerifier: r.aVerifierCount || "",
+      // "Oui" = déclaration avec changements saisis ; "Non" = envoyée
+      // (manuellement ou automatiquement) sans aucune modification ; "—" =
+      // pas encore de déclaration pour ce mois-ci — demande de Rene du
+      // 16.09.2026, pour distinguer d'un coup d'œil ce qui a vraiment été
+      // modifié de ce qui a été envoyé tel quel.
+      modifie: r.hasChanges === true ? "Oui" : r.hasChanges === false ? "Non" : "—",
+      tardif: r.tardifCount || "",
       statut: r.declarationStatus ? STATUS_LABELS[r.declarationStatus] ?? r.declarationStatus : "Aucune déclaration",
     });
   }
@@ -117,11 +126,12 @@ function buildAVerifierSheet(workbook: ExcelJS.Workbook, rows: PayrollTeacherRow
     { header: "Cours concerné", key: "cours", width: 32 },
     { header: "Date de l'occurrence", key: "date", width: 16 },
     { header: "Impact sur le total", key: "impact", width: 16 },
+    { header: "Tardif ?", key: "tardif", width: 12 },
     { header: "Autre prof concerné", key: "autreProf", width: 26 },
     { header: "Commentaire", key: "commentaire", width: 40 },
   ];
   sheet.getRow(1).font = HEADER_FONT;
-  sheet.autoFilter = { from: "A1", to: "I1" };
+  sheet.autoFilter = { from: "A1", to: "J1" };
 
   const periodeLabel = formatPeriodLabel(period);
   let count = 0;
@@ -141,17 +151,18 @@ function buildAVerifierSheet(workbook: ExcelJS.Workbook, rows: PayrollTeacherRow
         cours: a.courseLabel ?? "",
         date: a.date ?? "",
         impact: a.delta,
+        tardif: a.tardif ? "Oui" : "",
         autreProf: a.autreProf ?? "",
         commentaire: a.comment ?? "",
       });
     }
   }
   if (count === 0) {
-    sheet.addRow(["", "", "", "Aucune ligne à vérifier ce mois-ci.", "", "", "", "", ""]);
+    sheet.addRow(["", "", "", "Aucune ligne à vérifier ce mois-ci.", "", "", "", "", "", ""]);
   }
 }
 
-const TEACHER_SHEET_WIDTHS = [14, 12, 32, 20, 34, 10, 12, 26, 40];
+const TEACHER_SHEET_WIDTHS = [14, 12, 32, 20, 34, 10, 12, 12, 26, 40];
 const TEACHER_SHEET_HEADERS = [
   "Date",
   "Jour",
@@ -160,6 +171,7 @@ const TEACHER_SHEET_HEADERS = [
   "Type de changement",
   "Impact",
   "À vérifier",
+  "Tardif",
   "Autre prof concerné",
   "Commentaire",
 ];
@@ -172,7 +184,7 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
 
   // --- En-tête d'identification du prof (lignes 1-3, avant le tableau) ---
   const titleRow = sheet.addRow([`${r.teacherName} (${r.analyticCode}) — ${ROLE_LABELS[r.role] ?? r.role}`]);
-  sheet.mergeCells(titleRow.number, 1, titleRow.number, 9);
+  sheet.mergeCells(titleRow.number, 1, titleRow.number, 10);
   titleRow.font = { bold: true, size: 13 };
 
   const subtitleRow = sheet.addRow([
@@ -180,14 +192,14 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
       r.declarationStatus ? STATUS_LABELS[r.declarationStatus] ?? r.declarationStatus : "Aucune déclaration"
     }`,
   ]);
-  sheet.mergeCells(subtitleRow.number, 1, subtitleRow.number, 9);
+  sheet.mergeCells(subtitleRow.number, 1, subtitleRow.number, 10);
   subtitleRow.font = { italic: true, color: { argb: "FF555555" } };
 
   sheet.addRow([]);
 
   const headerRow = sheet.addRow(TEACHER_SHEET_HEADERS);
   headerRow.font = HEADER_FONT;
-  sheet.autoFilter = { from: { row: headerRow.number, column: 1 }, to: { row: headerRow.number, column: 9 } };
+  sheet.autoFilter = { from: { row: headerRow.number, column: 1 }, to: { row: headerRow.number, column: 10 } };
 
   // --- Calendrier prévisionnel : une ligne par séance attendue du mois ---
   for (const occ of r.occurrences) {
@@ -200,19 +212,20 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
       a ? CHANGE_TYPE_LABELS[a.type] ?? a.type : "",
       a ? a.delta : 0,
       a?.aVerifier ? "Oui" : "",
+      a?.tardif ? "Oui" : "",
       a?.autreProf ?? "",
       a?.comment ?? "",
     ]);
   }
   if (r.occurrences.length === 0) {
-    sheet.addRow(["—", "", "Aucun cours à jour fixe rattaché ce mois-ci.", "", "", "", "", "", ""]);
+    sheet.addRow(["—", "", "Aucun cours à jour fixe rattaché ce mois-ci.", "", "", "", "", "", "", ""]);
   }
 
   // --- Ajustements hors planning propre (remplacement d'un·e collègue, "Autre" sans cours, anomalie de date) ---
   if (r.extraAdjustments.length > 0) {
     sheet.addRow([]);
     const sectionRow = sheet.addRow(["Autres changements déclarés (hors planning propre de ce prof)"]);
-    sheet.mergeCells(sectionRow.number, 1, sectionRow.number, 9);
+    sheet.mergeCells(sectionRow.number, 1, sectionRow.number, 10);
     sectionRow.font = { bold: true };
     for (const a of r.extraAdjustments) {
       sheet.addRow([
@@ -223,6 +236,7 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
         CHANGE_TYPE_LABELS[a.type] ?? a.type,
         a.delta,
         a.aVerifier ? "Oui" : "",
+        a.tardif ? "Oui" : "",
         a.autreProf ?? "",
         a.comment ?? "",
       ]);
@@ -235,7 +249,7 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
     const note = sheet.addRow([
       `${r.coursesSansJourFixe} cours sans jour fixe rattaché·s (ex. "packs" Etudes/SAE) — non comptés ci-dessus, à vérifier manuellement.`,
     ]);
-    sheet.mergeCells(note.number, 1, note.number, 9);
+    sheet.mergeCells(note.number, 1, note.number, 10);
     note.font = { italic: true, color: { argb: "FF8A6D00" } };
   }
 

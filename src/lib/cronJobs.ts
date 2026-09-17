@@ -17,6 +17,7 @@ import {
   REMINDER_HOUR,
   DEADLINE_DAY,
   DEADLINE_HOUR,
+  PERIOD_START_DAY,
 } from "./dates";
 import { sendReminderEmail, sendAutoSubmitNotice } from "./email";
 import { DeclarationStatus } from "@prisma/client";
@@ -30,7 +31,10 @@ async function markRan(jobKey: string, summary: string) {
   await prisma.cronRun.create({ data: { jobDate: jobKey, summary } });
 }
 
-/** Le 1er du mois : crée le brouillon de déclaration pour chaque prof actif. */
+/**
+ * Le 27 du mois (début de la période de paie, voir dates.ts) : crée le
+ * brouillon de déclaration pour chaque prof actif.
+ */
 async function ensureDeclarationsCreated(period: string, dateStr: string) {
   const jobKey = `${dateStr}:creation`;
   if (await alreadyRan(jobKey)) return { ran: false };
@@ -50,21 +54,22 @@ async function ensureDeclarationsCreated(period: string, dateStr: string) {
 }
 
 /**
- * J-4 / J-2 / J-1 : rappel aux profs qui n'ont pas encore soumis manuellement.
+ * J-4 et le matin du jour de la deadline (J-0) : rappel aux profs qui n'ont
+ * pas encore soumis manuellement (demande de Rene du 16 puis du
+ * 17.09.2026 — le rappel J-2 intermédiaire a été supprimé).
  *
- * J-4 et J-2 ne relancent que les profs dont la déclaration du mois est
- * encore totalement vide (aucune réponse à "y a-t-il eu des changements ?",
+ * J-4 ne relance que les profs dont la déclaration du mois est encore
+ * totalement vide (aucune réponse à "y a-t-il eu des changements ?",
  * aucune entrée saisie) : dès qu'un prof a commencé à s'en occuper, inutile
- * de le relancer. J-1, le dernier rappel avant la deadline, part à tous
- * ceux qui n'ont pas encore soumis, même s'ils ont un brouillon en cours —
- * c'est le dernier filet avant la clôture automatique (demande de Rene du
- * 16.09.2026).
+ * de le relancer. Le rappel du jour J, le dernier avant la deadline (21h ce
+ * jour-là), part à tous ceux qui n'ont pas encore soumis, même s'ils ont un
+ * brouillon en cours — c'est le dernier filet avant la clôture automatique.
  */
 async function sendDueReminders(period: string, dateStr: string, offset: number) {
   const jobKey = `${dateStr}:reminder`;
   if (await alreadyRan(jobKey)) return { ran: false };
 
-  const isFinalReminder = offset === 1;
+  const isFinalReminder = offset === 0;
 
   const notYetSubmitted = await prisma.teacher.findMany({
     where: {
@@ -90,9 +95,7 @@ async function sendDueReminders(period: string, dateStr: string, offset: number)
     },
   });
 
-  const reminderType = (
-    { 4: "RAPPEL_J4", 2: "RAPPEL_J2", 1: "RAPPEL_J1" } as const
-  )[offset as 4 | 2 | 1];
+  const reminderType = ({ 4: "RAPPEL_J4", 0: "RAPPEL_J0" } as const)[offset as 4 | 0];
 
   let sent = 0;
   for (const teacher of notYetSubmitted) {
@@ -172,14 +175,13 @@ export async function runDailyCronTick(now: Date = new Date()) {
   const period = currentPeriod(now);
   const results: Record<string, unknown> = { dateStr, period, hour };
 
-  if (day === 1) {
+  if (day === PERIOD_START_DAY) {
     results.creation = await ensureDeclarationsCreated(period, dateStr);
   }
 
   const reminderOffsetByDay: Record<number, number> = {
     [DEADLINE_DAY - 4]: 4,
-    [DEADLINE_DAY - 2]: 2,
-    [DEADLINE_DAY - 1]: 1,
+    [DEADLINE_DAY]: 0,
   };
   if (day in reminderOffsetByDay && hour >= REMINDER_HOUR) {
     results.reminder = await sendDueReminders(period, dateStr, reminderOffsetByDay[day]);

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { JOUR_VERS_INDEX } from "@/lib/dates";
+import { occurrenceDatesInPeriod } from "@/lib/dates";
 
 type ChangeType = "REMPLACEMENT_EFFECTUE" | "ABSENCE_REMPLACEE" | "ABSENCE_NON_REMPLACEE" | "AUTRE";
 type DeclarationStatus = "DRAFT" | "SUBMITTED_MANUAL" | "SUBMITTED_AUTO";
@@ -35,6 +35,7 @@ type Item = {
   otherTeacher: Teacher | null;
   otherTeacherFreeText: string | null;
   comment: string | null;
+  tardif: boolean;
 };
 
 type Declaration = {
@@ -51,6 +52,8 @@ export type Bundle = {
   periodLabel: string;
   deadlineLabel: string;
   locked: boolean;
+  lateWindowOpen: boolean;
+  lateWindowEndLabel: string;
   declaration: Declaration;
   myCourses: Course[];
   otherCourses: Course[];
@@ -65,35 +68,25 @@ const STATUS_BADGE: Record<DeclarationStatus, { label: string; cls: string }> = 
 
 /**
  * Devine la date la plus probable d'une séance du cours choisi, au sein de
- * la période en cours (le 1 au 20 du mois) — cherche toutes les occurrences
- * du jour de la semaine du cours dans cette fenêtre, et retient celle la
- * plus proche d'aujourd'hui (avant ou après). Reste modifiable ensuite ;
- * renvoie null si le cours n'a pas de jour fixe (ex. "packs" Etudes/SAE).
+ * la période en cours (27 du mois précédent au 26 du mois de la période) —
+ * cherche toutes les occurrences du jour de la semaine du cours dans cette
+ * fenêtre, et retient celle la plus proche d'aujourd'hui (avant ou après).
+ * Reste modifiable ensuite ; renvoie null si le cours n'a pas de jour fixe
+ * (ex. "packs" Etudes/SAE).
  */
 function dateAutoPourCours(course: Course | null | undefined, period: string): string | null {
   if (!course || !course.jour) return null;
-  const jourIndex = JOUR_VERS_INDEX[course.jour];
-  if (jourIndex === undefined) return null;
-
-  const [yearStr, monthStr] = period.split("-");
-  const year = Number(yearStr);
-  const month = Number(monthStr); // 1-12
-  if (!year || !month) return null;
+  const dates = occurrenceDatesInPeriod(course.jour, period);
+  if (dates.length === 0) return null;
 
   const aujourdhui = new Date();
-  let meilleure: { date: Date; ecart: number } | null = null;
-  for (let jourDuMois = 1; jourDuMois <= 20; jourDuMois++) {
-    const candidat = new Date(year, month - 1, jourDuMois);
-    if (candidat.getDay() !== jourIndex) continue;
+  let meilleure: { date: string; ecart: number } | null = null;
+  for (const d of dates) {
+    const candidat = new Date(`${d}T00:00:00`);
     const ecart = Math.abs(candidat.getTime() - aujourdhui.getTime());
-    if (!meilleure || ecart < meilleure.ecart) meilleure = { date: candidat, ecart };
+    if (!meilleure || ecart < meilleure.ecart) meilleure = { date: d, ecart };
   }
-  if (!meilleure) return null;
-
-  const y = meilleure.date.getFullYear();
-  const m = String(meilleure.date.getMonth() + 1).padStart(2, "0");
-  const d = String(meilleure.date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return meilleure ? meilleure.date : null;
 }
 
 const emptyForm = {
@@ -158,6 +151,11 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
     setShowForm("new");
   }
 
+  function openLateForm() {
+    setForm(emptyForm);
+    setShowForm("late-new");
+  }
+
   function openEditForm(item: Item) {
     setForm({
       type: item.type,
@@ -182,8 +180,9 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         otherTeacherFreeText: form.otherTeacherId ? null : form.otherTeacherFreeText || null,
         comment: form.comment || null,
       };
-      const url = showForm === "new" ? "/api/declarations/items" : `/api/declarations/items/${showForm}`;
-      const method = showForm === "new" ? "POST" : "PATCH";
+      const isNew = showForm === "new" || showForm === "late-new";
+      const url = isNew ? "/api/declarations/items" : `/api/declarations/items/${showForm}`;
+      const method = isNew ? "POST" : "PATCH";
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -235,6 +234,11 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
   const allCourses = [...bundle.myCourses, ...bundle.otherCourses];
   const isSubmitted = declaration.status === "SUBMITTED_MANUAL";
   const canEdit = !locked;
+  // Fenêtre de saisie tardive (20-26, voir dates.ts) : la déclaration reste
+  // verrouillée telle qu'envoyée, mais un changement de dernière minute
+  // peut encore être ajouté à part, marqué "tardif".
+  const canAddLate = locked && bundle.lateWindowOpen;
+  const lateItems = declaration.items.filter((i) => i.tardif);
 
   return (
     <main className="page">
@@ -260,7 +264,56 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             via « Voir l'historique » tout en bas de cette page.
           </p>
         </div>
-      ) : (
+      ) : null}
+
+      {locked && bundle.lateWindowOpen && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Un changement de dernière minute ?</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Vous pouvez encore signaler un changement survenu après le {bundle.deadlineLabel}, jusqu'au{" "}
+            {bundle.lateWindowEndLabel}. Votre décompte déjà envoyé n'est pas modifié — ce changement s'y ajoute à
+            part et est transmis à la comptabilité.
+          </p>
+
+          {lateItems.length === 0 && showForm !== "late-new" && (
+            <p className="muted">Aucun changement tardif signalé pour l'instant.</p>
+          )}
+          {lateItems.map((item) => (
+            <div key={item.id} className="card nested">
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <p style={{ fontWeight: 600, margin: 0 }}>{TYPE_LABELS[item.type]}</p>
+                <span className="badge warning">Tardif</span>
+              </div>
+              {item.course && (
+                <p className="muted" style={{ margin: "4px 0" }}>
+                  Cours : {item.course.nomCours} ({item.course.code})
+                  {item.course.jour ? ` — ${item.course.jour} ${item.course.heureDebut ?? ""}` : ""}
+                </p>
+              )}
+              {item.date && <p className="muted" style={{ margin: "4px 0" }}>Date : {item.date.slice(0, 10)}</p>}
+              {(item.otherTeacher || item.otherTeacherFreeText) && (
+                <p className="muted" style={{ margin: "4px 0" }}>
+                  Autre prof : {item.otherTeacher?.name ?? item.otherTeacherFreeText}
+                </p>
+              )}
+              {item.comment && <p className="muted" style={{ margin: "4px 0" }}>Commentaire : {item.comment}</p>}
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <button className="btn danger small" onClick={() => deleteItem(item.id)}>
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {showForm !== "late-new" && (
+            <button className="btn secondary" onClick={openLateForm}>
+              + Signaler un changement tardif
+            </button>
+          )}
+        </div>
+      )}
+
+      {!locked && (
         <div className="card">
           <div
             style={{
@@ -354,9 +407,15 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         </div>
       )}
 
-      {canEdit && showForm && (
+      {(canEdit || canAddLate) && showForm && (
         <div className="card">
-          <h2 style={{ marginTop: 0 }}>{showForm === "new" ? "Nouveau changement" : "Modifier le changement"}</h2>
+          <h2 style={{ marginTop: 0 }}>
+            {showForm === "late-new"
+              ? "Nouveau changement tardif"
+              : showForm === "new"
+                ? "Nouveau changement"
+                : "Modifier le changement"}
+          </h2>
 
           <label>Type de changement</label>
           <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as ChangeType })}>

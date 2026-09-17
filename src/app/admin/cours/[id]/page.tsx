@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { AdminRole } from "@prisma/client";
 import { formatPeriodLabel } from "@/lib/dates";
 import CourseParticipants from "@/components/CourseParticipants";
+import CourseEditForm from "@/components/CourseEditForm";
 
 const TYPE_LABELS: Record<string, string> = {
   REMPLACEMENT_EFFECTUE: "Remplacement effectué",
@@ -46,6 +47,12 @@ export default async function FicheCoursPage({ params }: { params: { id: string 
   });
 
   const canEdit = admin.role === "ADMIN";
+  // Nom, jour et horaire du cours : ouvert à l'admin, la comptabilité et la
+  // direction (demande de Rene du 17.09.2026) — distinct de `canEdit`
+  // ci-dessus, qui reste réservé à l'admin pour la gestion des
+  // musicien·nes/co-enseignant·es.
+  const canEditCourseFields =
+    admin.role === "ADMIN" || admin.role === "COMPTABILITE" || admin.role === "DIRECTION";
 
   return (
     <div>
@@ -65,6 +72,14 @@ export default async function FicheCoursPage({ params }: { params: { id: string 
               </span>
             )}
           </div>
+          <CourseEditForm
+            courseId={course.id}
+            initialNomCours={course.nomCours}
+            initialJour={course.jour}
+            initialHeureDebut={course.heureDebut}
+            initialHeureFin={course.heureFin}
+            canEdit={canEditCourseFields}
+          />
         </div>
       </div>
 

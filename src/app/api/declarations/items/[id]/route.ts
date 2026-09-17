@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireTeacher } from "@/lib/auth";
-import { currentPeriod, isPastDeadline } from "@/lib/dates";
+import { isPastDeadline, isWithinLateWindow } from "@/lib/dates";
 
-async function assertOwnedAndEditable(itemId: string, teacherId: string) {
+/**
+ * `forDelete` : une ligne tardive (voir dates.ts / items/route.ts) reste
+ * supprimable par le prof tant que la fenêtre tardive est ouverte, même si
+ * la déclaration elle-même est verrouillée — permet d'annuler une erreur
+ * de saisie de dernière minute. La modification (PATCH) d'une ligne déjà
+ * soumise reste bloquée dans tous les cas après la deadline.
+ */
+async function assertOwnedAndEditable(itemId: string, teacherId: string, forDelete = false) {
   const item = await prisma.declarationItem.findUnique({
     where: { id: itemId },
     include: { declaration: true },
   });
   if (!item || item.declaration.teacherId !== teacherId) return null;
-  if (isPastDeadline(item.declaration.period)) return "locked" as const;
+  if (isPastDeadline(item.declaration.period)) {
+    if (forDelete && item.tardif && isWithinLateWindow(item.declaration.period)) return item;
+    return "locked" as const;
+  }
   return item;
 }
 
@@ -46,7 +56,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   const teacher = await requireTeacher();
   if (!teacher) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
 
-  const check = await assertOwnedAndEditable(params.id, teacher.id);
+  const check = await assertOwnedAndEditable(params.id, teacher.id, true);
   if (!check) return NextResponse.json({ error: "Ligne introuvable." }, { status: 404 });
   if (check === "locked") {
     return NextResponse.json({ error: "Déclaration verrouillée (deadline dépassée)." }, { status: 403 });

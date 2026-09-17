@@ -32,8 +32,9 @@ enum ChangeType {
 enum ReminderType {
   RAPPEL_J4
   RAPPEL_J3 // conservé pour l'historique ; plus généré depuis le passage à J-4/J-2/J-1
-  RAPPEL_J2
-  RAPPEL_J1
+  RAPPEL_J2 // conservé pour l'historique ; plus généré depuis le passage à J-4/J-0
+  RAPPEL_J1 // conservé pour l'historique ; plus généré depuis le passage à J-4/J-0
+  RAPPEL_J0 // le matin du jour de la deadline (dernier rappel)
   AUTO_SOUMISSION
 }
 
@@ -149,6 +150,13 @@ model DeclarationItem {
 
   hours           Float?
   comment         String?
+
+  // Ajoutée après la deadline (20 à 21h) mais avant la fin de la période (le
+  // 26) — voir `isWithinLateWindow` dans dates.ts. La déclaration déjà
+  // soumise n'est pas rouverte : seule cette ligne est marquée tardive,
+  // pour que la comptabilité/direction (alertées par email) décide de
+  // l'inclure ce mois-ci ou de la reporter.
+  tardif          Boolean            @default(false)
 
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt

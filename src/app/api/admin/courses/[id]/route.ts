@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { JOUR_VERS_INDEX } from "@/lib/dates";
 import { AdminRole } from "@prisma/client";
 
 // Fiche détaillée d'un cours : titulaire, participant·es (musicien·nes,
@@ -44,6 +45,50 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const { declarationItems, ...courseFields } = course;
   return NextResponse.json({ course: { ...courseFields, history } });
+}
+
+// Modifie le nom, le jour et les horaires d'un cours existant — ouvert à
+// l'admin, la comptabilité et la direction (demande de Rene du
+// 17.09.2026 : le code (identifiant analytique unique, référencé par les
+// déclarations) n'est volontairement pas modifiable ici).
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
+
+  const course = await prisma.course.findUnique({ where: { id: params.id } });
+  if (!course) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
+
+  const body = await req.json();
+  const { nomCours, jour, heureDebut, heureFin } = body;
+
+  if (nomCours !== undefined && (typeof nomCours !== "string" || !nomCours.trim())) {
+    return NextResponse.json({ error: "Le nom du cours est requis." }, { status: 400 });
+  }
+  if (jour !== undefined && jour !== null && jour !== "" && !(jour in JOUR_VERS_INDEX)) {
+    return NextResponse.json({ error: "Jour de la semaine invalide." }, { status: 400 });
+  }
+
+  const updated = await prisma.course.update({
+    where: { id: params.id },
+    data: {
+      ...(nomCours !== undefined ? { nomCours: nomCours.trim(), libelle: nomCours.trim() } : {}),
+      ...(jour !== undefined ? { jour: jour || null } : {}),
+      ...(heureDebut !== undefined ? { heureDebut: heureDebut || null } : {}),
+      ...(heureFin !== undefined ? { heureFin: heureFin || null } : {}),
+    },
+    select: {
+      id: true,
+      code: true,
+      categorie: true,
+      nomCours: true,
+      jour: true,
+      heureDebut: true,
+      heureFin: true,
+      teacher: { select: { id: true, name: true } },
+    },
+  });
+
+  return NextResponse.json({ course: updated });
 }
 
 // Supprime définitivement un cours — réservé aux cours sans aucun

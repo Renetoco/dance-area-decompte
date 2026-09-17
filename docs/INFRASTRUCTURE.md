@@ -89,13 +89,16 @@ Hébergée chez **Neon** (PostgreSQL serverless). Le schéma est défini dans
   supplémentaires rattachées à un cours (musicien·ne accompagnateur·rice,
   co-enseignant·e), en plus du·de la titulaire.
 - **MonthlyDeclaration** — une déclaration = un·e prof + une période
-  (`"2026-09"` = du 1er au 20 septembre). Statut : `DRAFT` (en cours),
-  `SUBMITTED_MANUAL` (soumis par le prof), `SUBMITTED_AUTO` (verrouillé
-  automatiquement à la deadline).
+  (`"2026-09"` = du 27 août au 26 septembre 2026 — voir "Période de paie"
+  dans la section 6). Statut : `DRAFT` (en cours), `SUBMITTED_MANUAL`
+  (soumis par le prof), `SUBMITTED_AUTO` (verrouillé automatiquement à la
+  date limite).
 - **DeclarationItem** — une ligne de changement dans une déclaration
   (remplacement effectué, absence remplacée/non remplacée, autre), liée
   au cours concerné, à la date, à l'autre prof éventuellement impliqué, aux
-  heures et à un commentaire.
+  heures et à un commentaire. Le champ `tardif` marque une ligne saisie
+  après la date limite mais avant la fin de la période (voir section 6) —
+  la déclaration déjà soumise n'est pas rouverte pour l'accueillir.
 - **AdminUser** — comptes admin/comptabilité/direction, avec rôle
   (`ADMIN`, `COMPTABILITE`, `DIRECTION`).
 - **ReminderLog** — trace de chaque email de rappel/notification envoyé
@@ -125,6 +128,13 @@ Deux types de comptes, avec la même mécanique de session (cookie signé,
   - `DIRECTION` — tableau de bord des déclarations + export Excel (même
     accès que `COMPTABILITE`, élargi le 16.09.2026 pour Anastasia).
 
+  Les trois rôles peuvent modifier le nom, le jour et l'horaire d'un cours
+  existant depuis sa fiche (`PATCH /api/admin/courses/[id]`, élargi le
+  17.09.2026) — le code du cours (identifiant analytique unique, référencé
+  par les déclarations) n'est volontairement pas modifiable depuis cet
+  écran. La création/suppression de cours et la gestion des
+  musicien·nes/co-enseignant·es restent réservées à `ADMIN`.
+
 Deux comptes admin sont **protégés** dans le code (`isProtectedAdminEmail`
 dans `src/lib/auth.ts`) : `rene.torres@dancearea.ch` et
 `anastasia@dancearea.ch`. Ils ne peuvent être ni désactivés ni supprimés
@@ -151,28 +161,50 @@ fois le même jour :
 
 | Moment (heure de Genève) | Action |
 |---|---|
-| Le 1er du mois | Crée une déclaration vierge (`DRAFT`) pour chaque prof actif |
+| Le 27 du mois (début de la période) | Crée une déclaration vierge (`DRAFT`) pour chaque prof actif |
 | Le 16 à 9h (J-4) | Envoie un rappel par email aux profs dont la déclaration du mois est encore totalement vide (aucune entrée, aucune réponse à "y a-t-il eu des changements ?") |
-| Le 18 à 9h (J-2) | Idem |
-| Le 19 à 9h (J-1) | Dernier rappel : envoyé à tous les profs n'ayant pas encore soumis manuellement, même avec un brouillon en cours (dernier filet avant la clôture) |
+| Le 20 à 9h (J-0, matin de la date limite) | Dernier rappel : envoyé à tous les profs n'ayant pas encore soumis manuellement, même avec un brouillon en cours (dernier filet avant la clôture) |
 | Le 20 à 21h (date limite) | Verrouille toutes les déclarations non soumises manuellement, les marque `SUBMITTED_AUTO`, et notifie chaque prof par email |
 
-La période déclarée va donc **du 1er au 20 de chaque mois**. Après le 20
-à 21h, plus personne ne peut modifier sa déclaration du mois (sauf
-réouverture exceptionnelle par un admin).
+### Période de paie (27 → 26) et fenêtre tardive
+
+Précision de la comptabilité du 17.09.2026 : la vraie période de paie va
+du **27 du mois précédent au 26 du mois de la période** (ex. la période
+`"2026-09"` couvre le 27 août au 26 septembre 2026) — et non du 1er au 20
+comme avant cette date. Le calendrier prévisionnel de cours (base du
+décompte, voir `occurrenceDatesInPeriod` dans `dates.ts`) couvre donc
+toute cette fenêtre, ce qui laisse une queue de 6 jours (21-26) après la
+date limite de soumission (le 20) :
+
+- **Avant la date limite** : un prof peut déjà déclarer un changement prévu
+  sur cette queue (21-26) — ça n'a rien de spécial, c'est juste une date
+  future dans le calendrier de la période.
+- **Après la date limite (20 à 21h) et jusqu'au 26 inclus** : la
+  déclaration déjà soumise (manuellement ou automatiquement) reste
+  verrouillée telle quelle, mais le prof peut encore signaler un
+  changement de dernière minute depuis sa page — chaque ligne ajoutée dans
+  ce créneau est marquée `tardif` en base, et un email est envoyé à tous
+  les comptes `COMPTABILITE`/`DIRECTION` actifs pour qu'ils décident de
+  l'inclure sur le salaire du mois courant ou de le reporter au mois
+  suivant (repérable dans l'export Excel, colonnes "Tardif").
+- **Après le 26** : la période est totalement close, plus aucune saisie
+  n'est possible (ni normale, ni tardive).
 
 ## 7. Emails
 
-Quatre types d'emails, tous envoyés via `src/lib/email.ts` (SMTP
+Cinq types d'emails, tous envoyés via `src/lib/email.ts` (SMTP
 Infomaniak, adresse d'expédition configurable via `MAIL_FROM`) :
 
 1. **Bienvenue** — à la création d'un compte, avec identifiant + mot de
    passe temporaire.
 2. **Réinitialisation** — après un "mot de passe oublié", nouveau mot de
    passe temporaire.
-3. **Rappel** (J-4 / J-2 / J-1) — avant la date limite.
-4. **Notification de soumission automatique** — après la deadline, si la
-   déclaration a été verrouillée sans action du prof.
+3. **Rappel** (J-4 puis le matin de J-0) — avant la date limite.
+4. **Notification de soumission automatique** — après la date limite, si
+   la déclaration a été verrouillée sans action du prof.
+5. **Alerte entrée tardive** — aux comptes `COMPTABILITE`/`DIRECTION`,
+   quand un prof signale un changement après la date limite (voir
+   "Période de paie et fenêtre tardive" en section 6).
 
 Les noms de profs sont échappés avant insertion dans le HTML de l'email
 (protection contre l'injection de balisage).

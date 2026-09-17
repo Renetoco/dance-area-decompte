@@ -54,15 +54,38 @@ export async function sendReminderEmail(opts: {
   to: string;
   teacherName: string;
   period: string;
-  daysLeft: number;
+  daysLeft: number; // 4 (rappel J-4) ou 0 (dernier rappel, le matin de la deadline)
 }) {
   const { to, teacherName, period, daysLeft } = opts;
   const link = `${APP_URL}/prof`;
-  const subject = `Rappel : décompte à soumettre avant le ${formatDeadlineLabel(period)}`;
+  const isLastCall = daysLeft === 0;
+
+  const subject = isLastCall
+    ? `Dernier jour : décompte à soumettre avant ${formatDeadlineLabel(period)}`
+    : `Rappel : décompte à soumettre avant le ${formatDeadlineLabel(period)}`;
+
+  const introHtml = isLastCall
+    ? `<p>C'est aujourd'hui : vous avez jusqu'à <strong>${formatDeadlineLabel(period)}</strong> pour
+       soumettre votre décompte pour la période du ${formatPeriodLabel(period)}.</p>`
+    : `<p>Il reste <strong>${daysLeft} jours</strong> pour soumettre votre décompte pour la
+       période du ${formatPeriodLabel(period)}.</p>`;
+  const introText = isLastCall
+    ? `C'est aujourd'hui : vous avez jusqu'à ${formatDeadlineLabel(period)} pour soumettre votre décompte pour la période du ${formatPeriodLabel(period)}.`
+    : `Il reste ${daysLeft} jours pour soumettre votre décompte pour la période du ${formatPeriodLabel(period)}.`;
+
+  const closingHtml = isLastCall
+    ? `<p>Passé cette heure, votre décompte sera envoyé automatiquement avec ce que vous aurez
+       déjà saisi (ou « aucun changement » si rien n'a été rempli).</p>`
+    : `<p>Ces rappels sont automatiques : si vous préférez ne plus le recevoir, il suffit
+       d'envoyer votre décompte dès maintenant, même sans changement. Sinon, un dernier rappel
+       vous parviendra le matin du jour de la deadline, simplement pour éviter un oubli.</p>`;
+  const closingText = isLastCall
+    ? `Passé cette heure, votre décompte sera envoyé automatiquement avec ce que vous aurez déjà saisi (ou "aucun changement" si rien n'a été rempli).`
+    : `Ces rappels sont automatiques : si vous préférez ne plus le recevoir, il suffit d'envoyer votre décompte dès maintenant, même sans changement. Sinon, un dernier rappel vous parviendra le matin du jour de la deadline, simplement pour éviter un oubli.`;
+
   const html = wrapHtml(`
     <p>Bonjour ${escapeHtml(teacherName)},</p>
-    <p>Il reste <strong>${daysLeft} jour${daysLeft > 1 ? "s" : ""}</strong> pour soumettre
-    votre décompte pour la période du ${formatPeriodLabel(period)}.</p>
+    ${introHtml}
     <p>Peut-être que ce mois-ci, rien n'a changé sur votre planning : dans ce
     cas, un clic sur « Non, rien n'a changé » suffit. Vous pouvez aussi ne
     rien faire du tout — votre décompte sera envoyé automatiquement à la
@@ -72,15 +95,42 @@ export async function sendReminderEmail(opts: {
       <a href="${link}" style="background:#111;color:#fff;padding:12px 20px;
       border-radius:6px;text-decoration:none;">Accéder à mon décompte</a>
     </p>
-    <p>Ces rappels sont automatiques : si vous préférez ne plus les
-    recevoir, il suffit d'envoyer votre décompte dès maintenant, même sans
-    changement. Sinon, un ou deux rappels vous parviendront encore dans les
-    derniers jours, simplement pour éviter un oubli.</p>
+    ${closingHtml}
     <p>Merci pour votre engagement auprès des élèves, et à très bientôt !<br/>
     L'équipe Dance Area</p>
   `);
-  const text = `Bonjour ${teacherName},\n\nIl reste ${daysLeft} jour(s) pour soumettre votre décompte pour la période du ${formatPeriodLabel(period)}.\n\nPeut-être que ce mois-ci, rien n'a changé sur votre planning : dans ce cas, un clic sur « Non, rien n'a changé » suffit. Vous pouvez aussi ne rien faire du tout — votre décompte sera envoyé automatiquement à la date limite, avec ce que vous aurez déjà saisi (ou « aucun changement » si rien n'a été rempli).\n\nAccédez à votre décompte : ${link}\n\nCes rappels sont automatiques : si vous préférez ne plus les recevoir, il suffit d'envoyer votre décompte dès maintenant, même sans changement. Sinon, un ou deux rappels vous parviendront encore dans les derniers jours, simplement pour éviter un oubli.\n\nMerci pour votre engagement auprès des élèves, et à très bientôt !\nL'équipe Dance Area`;
+  const text = `Bonjour ${teacherName},\n\n${introText}\n\nPeut-être que ce mois-ci, rien n'a changé sur votre planning : dans ce cas, un clic sur « Non, rien n'a changé » suffit. Vous pouvez aussi ne rien faire du tout — votre décompte sera envoyé automatiquement à la date limite, avec ce que vous aurez déjà saisi (ou « aucun changement » si rien n'a été rempli).\n\nAccédez à votre décompte : ${link}\n\n${closingText}\n\nMerci pour votre engagement auprès des élèves, et à très bientôt !\nL'équipe Dance Area`;
   await send(to, subject, html, text);
+}
+
+export async function sendLateEntryAlert(opts: {
+  to: string[];
+  teacherName: string;
+  period: string;
+  item: { typeLabel: string; courseLabel: string | null; date: string | null; comment: string | null };
+}) {
+  const { to, teacherName, period, item } = opts;
+  if (to.length === 0) return;
+
+  const subject = `Changement tardif signalé — ${teacherName} (${formatPeriodLabel(period)})`;
+  const detailLine = [item.typeLabel, item.courseLabel, item.date]
+    .filter((v): v is string => Boolean(v))
+    .map((v) => escapeHtml(v))
+    .join(" — ");
+  const detailLineText = [item.typeLabel, item.courseLabel, item.date].filter(Boolean).join(" — ");
+
+  const html = wrapHtml(`
+    <p>Bonjour,</p>
+    <p><strong>${escapeHtml(teacherName)}</strong> a signalé un changement après la date limite du
+    décompte de ${formatPeriodLabel(period)}. Sa déclaration avait déjà été envoyée et reste
+    inchangée ; cette ligne s'y ajoute, marquée « tardive ».</p>
+    <p>${detailLine}</p>
+    ${item.comment ? `<p>Commentaire : ${escapeHtml(item.comment)}</p>` : ""}
+    <p>À vous de décider si ce changement est pris en compte sur le salaire de ce mois-ci ou
+    reporté sur le mois suivant — il est repérable dans l'export Excel.</p>
+  `);
+  const text = `${teacherName} a signalé un changement après la date limite du décompte de ${formatPeriodLabel(period)}. Sa déclaration avait déjà été envoyée et reste inchangée ; cette ligne s'y ajoute, marquée "tardive".\n\n${detailLineText}\n${item.comment ? `Commentaire : ${item.comment}\n` : ""}\nÀ vous de décider si ce changement est pris en compte sur le salaire de ce mois-ci ou reporté sur le mois suivant — il est repérable dans l'export Excel.`;
+  await send(to.join(", "), subject, html, text);
 }
 
 export async function sendAutoSubmitNotice(opts: {

@@ -299,7 +299,7 @@ p.muted,
   min-width: 140px;
 }
 
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
   width: 100%;
@@ -312,6 +312,19 @@ textarea {
   -webkit-backdrop-filter: blur(8px);
   color: var(--ink);
   font-family: inherit;
+}
+
+/* Sans cette exclusion ci-dessus, une case à cocher hérite du "width: 100%"
+   destiné aux champs texte et s'étire sur toute la largeur de son
+   conteneur flex — elle se retrouve alors affichée par-dessus le texte du
+   label au lieu d'à côté (bug remonté par Rene le 17.09.2026 sur la grille
+   de sélection des profs). Taille fixe et naturelle à la place : */
+input[type="checkbox"],
+input[type="radio"] {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
 }
 
 input::placeholder,
@@ -538,7 +551,7 @@ tbody tr.is-clickable:hover {
 /* ===== Sélecteur de profs pour l'export Excel (grille responsive) ===== */
 .teacher-picker {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 2px 16px;
   max-height: 320px;
   overflow-y: auto;
@@ -547,12 +560,17 @@ tbody tr.is-clickable:hover {
 
 .teacher-picker-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 7px 6px;
   border-radius: 8px;
   font-size: 0.9rem;
+  line-height: 1.3;
   cursor: pointer;
+}
+
+.teacher-picker-item input[type="checkbox"] {
+  margin-top: 2px;
 }
 
 .teacher-picker-item:hover {

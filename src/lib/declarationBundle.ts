@@ -1,5 +1,12 @@
 import { prisma } from "./db";
-import { currentPeriod, formatPeriodLabel, formatDeadlineLabel, isPastDeadline } from "./dates";
+import {
+  currentPeriod,
+  formatPeriodLabel,
+  formatDeadlineLabel,
+  formatLateWindowEndLabel,
+  isPastDeadline,
+  isWithinLateWindow,
+} from "./dates";
 
 export async function getOrCreateDeclaration(teacherId: string, period: string) {
   const existing = await prisma.monthlyDeclaration.findUnique({
@@ -37,6 +44,8 @@ export async function getDeclarationBundle(teacherId: string, teacherName: strin
     periodLabel: formatPeriodLabel(period),
     deadlineLabel: formatDeadlineLabel(period),
     locked: isPastDeadline(period),
+    lateWindowOpen: isWithinLateWindow(period),
+    lateWindowEndLabel: formatLateWindowEndLabel(period),
     declaration,
     myCourses,
     otherCourses,

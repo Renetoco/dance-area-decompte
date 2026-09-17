@@ -45,6 +45,7 @@ export type PayrollAdjustment = {
   type: ChangeType;
   delta: number; // +1 / -1 / 0 (0 pour AUTRE, qui n'affecte jamais le total)
   aVerifier: boolean; // commentaire rempli et/ou remplaçant·e hors liste
+  tardif: boolean; // saisi après la deadline, dans la fenêtre de saisie tardive (voir dates.ts)
   courseLabel: string | null;
   date: string | null;
   autreProf: string | null;
@@ -72,6 +73,7 @@ export type PayrollTeacherRow = {
   totalAjustementsCours: number; // somme de tous les deltas (occurrences + extra)
   totalFinal: number; // coursesPrevus + totalAjustementsCours
   aVerifierCount: number; // nombre de lignes à vérifier (occurrences + extra)
+  tardifCount: number; // nombre de lignes saisies après la deadline (occurrences + extra)
   declarationStatus: DeclarationStatus | null; // null = aucune déclaration pour cette période
   hasChanges: boolean | null;
 };
@@ -136,6 +138,7 @@ export async function computePayrollForPeriod(period: string, teacherIds?: strin
     const extraAdjustments: PayrollAdjustment[] = [];
     let totalAjustementsCours = 0;
     let aVerifierCount = 0;
+    let tardifCount = 0;
 
     if (decl) {
       for (const item of decl.items) {
@@ -147,6 +150,7 @@ export async function computePayrollForPeriod(period: string, teacherIds?: strin
           type: item.type,
           delta,
           aVerifier,
+          tardif: item.tardif,
           courseLabel: item.course ? `${item.course.code} — ${item.course.nomCours}` : null,
           date,
           autreProf: item.otherTeacher?.name ?? item.otherTeacherFreeText ?? null,
@@ -154,6 +158,7 @@ export async function computePayrollForPeriod(period: string, teacherIds?: strin
         };
 
         if (aVerifier) aVerifierCount++;
+        if (item.tardif) tardifCount++;
         totalAjustementsCours += delta;
 
         const slot = item.courseId && date ? occurrenceIndex.get(`${item.courseId}|${date}`) : undefined;
@@ -184,6 +189,7 @@ export async function computePayrollForPeriod(period: string, teacherIds?: strin
       totalAjustementsCours,
       totalFinal: coursesPrevus + totalAjustementsCours,
       aVerifierCount,
+      tardifCount,
       declarationStatus: decl?.status ?? null,
       hasChanges: decl?.hasChanges ?? null,
     };
