@@ -13,7 +13,20 @@ type CourseRow = {
   heureFin: string | null;
 };
 
-type CourseOption = { id: string; code: string; nomCours: string; teacher: { id: string; name: string } | null };
+type CourseOption = {
+  id: string;
+  code: string;
+  nomCours: string;
+  jour: string | null;
+  heureDebut: string | null;
+  heureFin: string | null;
+  teacher: { id: string; name: string } | null;
+};
+
+function scheduleLabel(c: { jour: string | null; heureDebut: string | null; heureFin: string | null }) {
+  if (!c.jour) return "sans jour fixe";
+  return c.heureDebut ? `${c.jour} ${c.heureDebut}–${c.heureFin ?? ""}` : c.jour;
+}
 
 // Gère, depuis la fiche prof, les cours dont cette personne est titulaire —
 // symétrique de CourseTeacherEditor sur la fiche du cours (même endpoint,
@@ -135,7 +148,8 @@ export default function TeacherCourseManager({
               <option value="">— Ajouter un cours dont il/elle sera titulaire —</option>
               {options.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nomCours} ({c.code}){c.teacher ? ` — actuellement ${c.teacher.name}` : ""}
+                  {c.nomCours} ({c.code}) — {scheduleLabel(c)}
+                  {c.teacher ? ` — actuellement ${c.teacher.name}` : ""}
                 </option>
               ))}
             </select>

@@ -36,7 +36,15 @@ export default async function FicheProfPage({ params }: { params: { id: string }
   const allActiveCourses = canEdit
     ? await prisma.course.findMany({
         where: { active: true },
-        select: { id: true, code: true, nomCours: true, teacher: { select: { id: true, name: true } } },
+        select: {
+          id: true,
+          code: true,
+          nomCours: true,
+          jour: true,
+          heureDebut: true,
+          heureFin: true,
+          teacher: { select: { id: true, name: true } },
+        },
         orderBy: { nomCours: "asc" },
       })
     : [];
@@ -93,7 +101,14 @@ export default async function FicheProfPage({ params }: { params: { id: string }
             heureFin: p.course.heureFin,
           },
         }))}
-        availableCourses={allActiveCourses.map((c) => ({ id: c.id, code: c.code, nomCours: c.nomCours }))}
+        availableCourses={allActiveCourses.map((c) => ({
+          id: c.id,
+          code: c.code,
+          nomCours: c.nomCours,
+          jour: c.jour,
+          heureDebut: c.heureDebut,
+          heureFin: c.heureFin,
+        }))}
         canEdit={canEdit}
       />
 

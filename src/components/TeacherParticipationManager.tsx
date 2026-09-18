@@ -12,12 +12,17 @@ type ParticipationRow = {
   course: { id: string; code: string; nomCours: string; jour: string | null; heureDebut: string | null; heureFin: string | null };
 };
 
-type CourseOption = { id: string; code: string; nomCours: string };
+type CourseOption = { id: string; code: string; nomCours: string; jour: string | null; heureDebut: string | null; heureFin: string | null };
 
 const ROLE_LABELS: Record<ParticipantRole, string> = {
   MUSICIEN: "Musicien·ne",
   CO_ENSEIGNANT: "Co-enseignant·e",
 };
+
+function scheduleLabel(c: { jour: string | null; heureDebut: string | null; heureFin: string | null }) {
+  if (!c.jour) return "sans jour fixe";
+  return c.heureDebut ? `${c.jour} ${c.heureDebut}–${c.heureFin ?? ""}` : c.jour;
+}
 
 // Gère, depuis la fiche prof, les cours où cette personne intervient comme
 // musicien·ne ou co-enseignant·e (sans en être titulaire) — symétrique de
@@ -62,10 +67,7 @@ export default function TeacherParticipationManager({
       }
       const course = options.find((c) => c.id === courseId);
       if (course) {
-        setParticipations([
-          ...participations,
-          { id: data.participant.id, role: data.participant.role, course: { ...course, jour: null, heureDebut: null, heureFin: null } },
-        ]);
+        setParticipations([...participations, { id: data.participant.id, role: data.participant.role, course }]);
       }
       setCourseId("");
       router.refresh();
@@ -137,7 +139,7 @@ export default function TeacherParticipationManager({
               <option value="">— Ajouter une intervention sur un cours —</option>
               {options.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nomCours} ({c.code})
+                  {c.nomCours} ({c.code}) — {scheduleLabel(c)}
                 </option>
               ))}
             </select>

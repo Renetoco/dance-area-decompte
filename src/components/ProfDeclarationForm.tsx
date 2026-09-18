@@ -681,14 +681,14 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             <optgroup label="Vos cours">
               {bundle.myCourses.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nomCours} ({c.code}) {c.jour ? `— ${c.jour} ${c.heureDebut ?? ""}` : ""}
+                  {c.nomCours} ({c.code}) — {c.jour ? `${c.jour}${c.heureDebut ? ` ${c.heureDebut}–${c.heureFin ?? ""}` : ""}` : "sans jour fixe"}
                 </option>
               ))}
             </optgroup>
             <optgroup label="Autres cours de l'école">
               {bundle.otherCourses.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nomCours} ({c.code}) {c.jour ? `— ${c.jour} ${c.heureDebut ?? ""}` : ""}
+                  {c.nomCours} ({c.code}) — {c.jour ? `${c.jour}${c.heureDebut ? ` ${c.heureDebut}–${c.heureFin ?? ""}` : ""}` : "sans jour fixe"}
                 </option>
               ))}
             </optgroup>
