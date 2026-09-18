@@ -1,18 +1,15 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, canManageCourses } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AdminRole } from "@prisma/client";
 import TeacherDeclarationsHistory from "@/components/TeacherDeclarationsHistory";
+import TeacherCourseManager from "@/components/TeacherCourseManager";
+import TeacherParticipationManager from "@/components/TeacherParticipationManager";
 
 const ROLE_LABELS: Record<string, string> = {
   ENSEIGNANT: "Enseignant·e",
   MUSICIEN: "Musicien·ne",
-};
-
-const PARTICIPANT_ROLE_LABELS: Record<string, string> = {
-  MUSICIEN: "Musicien·ne",
-  CO_ENSEIGNANT: "Co-enseignant·e",
 };
 
 export default async function FicheProfPage({ params }: { params: { id: string } }) {
@@ -34,6 +31,15 @@ export default async function FicheProfPage({ params }: { params: { id: string }
     },
   });
   if (!teacher) notFound();
+
+  const canEdit = canManageCourses(admin);
+  const allActiveCourses = canEdit
+    ? await prisma.course.findMany({
+        where: { active: true },
+        select: { id: true, code: true, nomCours: true, teacher: { select: { id: true, name: true } } },
+        orderBy: { nomCours: "asc" },
+      })
+    : [];
 
   return (
     <div>
@@ -58,70 +64,38 @@ export default async function FicheProfPage({ params }: { params: { id: string }
       </div>
 
       <h2>Cours dont {teacher.role === "MUSICIEN" ? "il/elle est référent·e" : "il/elle est titulaire"} ({teacher.courses.length})</h2>
-      {teacher.courses.length === 0 ? (
-        <p className="muted">Aucun cours rattaché.</p>
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Cours</th>
-                <th>Catégorie</th>
-                <th>Jour</th>
-                <th>Horaire</th>
-              </tr>
-            </thead>
-            <tbody>
-              {teacher.courses.map((c) => (
-                <tr key={c.id} className="is-clickable">
-                  <td className="muted">{c.code}</td>
-                  <td>
-                    <Link href={`/admin/cours/${c.id}`}>{c.nomCours}</Link>
-                  </td>
-                  <td>{c.categorie}</td>
-                  <td>{c.jour ?? "—"}</td>
-                  <td>{c.heureDebut ? `${c.heureDebut} – ${c.heureFin ?? ""}` : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <TeacherCourseManager
+        teacherId={teacher.id}
+        initialCourses={teacher.courses.map((c) => ({
+          id: c.id,
+          code: c.code,
+          nomCours: c.nomCours,
+          jour: c.jour,
+          heureDebut: c.heureDebut,
+          heureFin: c.heureFin,
+        }))}
+        availableCourses={allActiveCourses}
+        canEdit={canEdit}
+      />
 
-      {teacher.courseParticipations.length > 0 && (
-        <>
-          <h2>Interventions comme musicien·ne / co-enseignant·e ({teacher.courseParticipations.length})</h2>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Cours</th>
-                  <th>Rôle</th>
-                  <th>Jour</th>
-                  <th>Horaire</th>
-                </tr>
-              </thead>
-              <tbody>
-                {teacher.courseParticipations.map((p) => (
-                  <tr key={p.id}>
-                    <td className="muted">{p.course.code}</td>
-                    <td>
-                      <Link href={`/admin/cours/${p.course.id}`}>{p.course.nomCours}</Link>
-                    </td>
-                    <td>
-                      <span className="badge info">{PARTICIPANT_ROLE_LABELS[p.role]}</span>
-                    </td>
-                    <td>{p.course.jour ?? "—"}</td>
-                    <td>{p.course.heureDebut ? `${p.course.heureDebut} – ${p.course.heureFin ?? ""}` : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <h2>Interventions comme musicien·ne / co-enseignant·e ({teacher.courseParticipations.length})</h2>
+      <TeacherParticipationManager
+        teacherId={teacher.id}
+        initialParticipations={teacher.courseParticipations.map((p) => ({
+          id: p.id,
+          role: p.role,
+          course: {
+            id: p.course.id,
+            code: p.course.code,
+            nomCours: p.course.nomCours,
+            jour: p.course.jour,
+            heureDebut: p.course.heureDebut,
+            heureFin: p.course.heureFin,
+          },
+        }))}
+        availableCourses={allActiveCourses.map((c) => ({ id: c.id, code: c.code, nomCours: c.nomCours }))}
+        canEdit={canEdit}
+      />
 
       <h2>Historique des déclarations ({teacher.declarations.length})</h2>
       <TeacherDeclarationsHistory declarations={teacher.declarations} />

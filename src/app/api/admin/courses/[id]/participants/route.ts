@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, canManageCourses } from "@/lib/auth";
+import { logAdminAction } from "@/lib/auditLog";
 import { AdminRole, CourseParticipantRole } from "@prisma/client";
 
+const PARTICIPANT_ROLE_LABELS: Record<CourseParticipantRole, string> = {
+  MUSICIEN: "musicien·ne",
+  CO_ENSEIGNANT: "co-enseignant·e",
+};
+
 // Rattache une personne supplémentaire à un cours (musicien·ne
-// accompagnateur·rice, co-prof) sans toucher au·à la titulaire du cours.
+// accompagnateur·rice, co-prof) sans toucher au·à la titulaire du cours —
+// réservé à qui peut gérer les cours (demande de Rene du 18.09.2026, voir
+// canManageCourses ; auparavant réservé au seul compte ADMIN).
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN]);
-  if (!admin) return NextResponse.json({ error: "Réservé à l'administrateur." }, { status: 403 });
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  if (!admin || !canManageCourses(admin)) {
+    return NextResponse.json({ error: "Non autorisé à modifier les personnes rattachées à un cours." }, { status: 403 });
+  }
 
   const { teacherId, role } = await req.json();
   if (!teacherId) {
@@ -24,6 +34,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       data: { courseId: params.id, teacherId, role: participantRole },
       include: { teacher: { select: { id: true, name: true, role: true } } },
     });
+
+    await logAdminAction(admin, {
+      action: "course.participant_added",
+      entityType: "CourseParticipant",
+      entityId: participant.id,
+      description: `${participant.teacher.name} rattaché·e comme ${PARTICIPANT_ROLE_LABELS[participantRole]} au cours ${course.nomCours} (${course.code})`,
+    });
+
     return NextResponse.json({ participant });
   } catch (e: any) {
     if (e?.code === "P2002") {

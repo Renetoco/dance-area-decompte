@@ -22,7 +22,7 @@ const ROLE_LABELS: Record<TeacherRole, string> = {
   MUSICIEN: "Musicien·ne",
 };
 
-export default function AdminTeachers() {
+export default function AdminTeachers({ canManageCourses }: { canManageCourses: boolean }) {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [emailDrafts, setEmailDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -232,49 +232,57 @@ export default function AdminTeachers() {
                     <Link href={`/admin/profs/${t.id}`}>{t.name}</Link>
                   </td>
                   <td>
-                    <select
-                      value={t.role}
-                      disabled={busyId === t.id}
-                      onChange={(e) => changeRole(t, e.target.value as TeacherRole)}
-                      style={{ width: 140 }}
-                    >
-                      {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
+                    {canManageCourses ? (
+                      <select
+                        value={t.role}
+                        disabled={busyId === t.id}
+                        onChange={(e) => changeRole(t, e.target.value as TeacherRole)}
+                        style={{ width: 140 }}
+                      >
+                        {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      ROLE_LABELS[t.role]
+                    )}
                   </td>
                   <td>{t._count.courses}</td>
                   <td>
                     <input
                       type="checkbox"
                       checked={t.ajbTeacher}
-                      disabled={busyId === t.id}
+                      disabled={busyId === t.id || !canManageCourses}
                       onChange={() => toggleAjb(t)}
                       title="Donne des cours AJB"
                     />
                   </td>
                   <td>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <input
-                        type="email"
-                        placeholder="email@dancearea.ch"
-                        style={{ width: 200 }}
-                        value={draftFor(t)}
-                        onChange={(e) => setEmailDrafts({ ...emailDrafts, [t.id]: e.target.value })}
-                      />
-                      {t.email && dirty && (
-                        <button
-                          className="btn small"
-                          disabled={busyId === t.id}
-                          onClick={() => enregistrerEmail(t)}
-                          title="Enregistrer le nouvel email"
-                        >
-                          ✓
-                        </button>
-                      )}
-                    </div>
+                    {canManageCourses ? (
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input
+                          type="email"
+                          placeholder="email@dancearea.ch"
+                          style={{ width: 200 }}
+                          value={draftFor(t)}
+                          onChange={(e) => setEmailDrafts({ ...emailDrafts, [t.id]: e.target.value })}
+                        />
+                        {t.email && dirty && (
+                          <button
+                            className="btn small"
+                            disabled={busyId === t.id}
+                            onClick={() => enregistrerEmail(t)}
+                            title="Enregistrer le nouvel email"
+                          >
+                            ✓
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      t.email ?? "—"
+                    )}
                   </td>
                   <td>
                     <span className={`badge ${t.active ? "success" : "neutral"}`}>
@@ -282,6 +290,9 @@ export default function AdminTeachers() {
                     </span>
                   </td>
                   <td>
+                    {!canManageCourses ? (
+                      <span className="muted">—</span>
+                    ) : (
                     <div className="btn-row">
                       {!t.email && (
                         <button className="btn small" disabled={busyId === t.id || !dirty} onClick={() => activer(t.id)}>
@@ -305,6 +316,7 @@ export default function AdminTeachers() {
                         </button>
                       )}
                     </div>
+                    )}
                   </td>
                 </tr>
               );
@@ -313,6 +325,7 @@ export default function AdminTeachers() {
         </table>
       </div>
 
+      {canManageCourses && (
       <div style={{ marginTop: 20 }}>
         {!showAddForm ? (
           <button className="btn secondary" onClick={() => setShowAddForm(true)}>
@@ -352,6 +365,7 @@ export default function AdminTeachers() {
           </form>
         )}
       </div>
+      )}
     </div>
   );
 }

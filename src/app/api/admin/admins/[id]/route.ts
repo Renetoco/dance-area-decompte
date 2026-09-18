@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin, isProtectedAdminEmail } from "@/lib/auth";
+import { logAdminAction } from "@/lib/auditLog";
 import { AdminRole } from "@prisma/client";
 
 // Corrige l'email (ou le nom / rôle / statut actif) d'un compte
@@ -54,6 +55,39 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     select: { id: true, name: true, email: true, role: true, active: true, canManageCourses: true },
   });
 
+  if (typeof canManageCourses === "boolean" && canManageCourses !== target.canManageCourses) {
+    await logAdminAction(admin, {
+      action: canManageCourses ? "admin.can_manage_courses_granted" : "admin.can_manage_courses_revoked",
+      entityType: "AdminUser",
+      entityId: target.id,
+      description: `Droit "Gérer les cours" ${canManageCourses ? "accordé" : "retiré"} pour ${updated.name}`,
+    });
+  }
+  if (typeof active === "boolean" && active !== target.active) {
+    await logAdminAction(admin, {
+      action: active ? "admin.reactivated" : "admin.deactivated",
+      entityType: "AdminUser",
+      entityId: target.id,
+      description: `Compte backend ${active ? "réactivé" : "désactivé"} : ${updated.name}`,
+    });
+  }
+  if (role && role in AdminRole && role !== target.role) {
+    await logAdminAction(admin, {
+      action: "admin.role_changed",
+      entityType: "AdminUser",
+      entityId: target.id,
+      description: `Rôle de ${updated.name} changé : ${target.role} → ${role}`,
+    });
+  }
+  if (email && updated.email !== target.email) {
+    await logAdminAction(admin, {
+      action: "admin.email_changed",
+      entityType: "AdminUser",
+      entityId: target.id,
+      description: `Email de ${updated.name} changé : ${target.email} → ${updated.email}`,
+    });
+  }
+
   return NextResponse.json({ admin: updated });
 }
 
@@ -74,5 +108,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   }
 
   await prisma.adminUser.delete({ where: { id: params.id } });
+
+  await logAdminAction(admin, {
+    action: "admin.deleted",
+    entityType: "AdminUser",
+    entityId: target.id,
+    description: `Compte backend supprimé : ${target.name} (${target.email})`,
+  });
+
   return NextResponse.json({ ok: true });
 }

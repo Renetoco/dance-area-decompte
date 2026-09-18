@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin, canManageCourses } from "@/lib/auth";
+import { logAdminAction } from "@/lib/auditLog";
 import { JOUR_VERS_INDEX } from "@/lib/dates";
 import { AdminRole } from "@prisma/client";
 
@@ -47,22 +48,28 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json({ course: { ...courseFields, history } });
 }
 
-// Modifie le nom, le jour, les horaires et le statut AJB d'un cours
-// existant — ouvert à l'admin, la comptabilité et la direction (demande de
-// Rene du 17.09.2026 : le code (identifiant analytique unique, référencé
-// par les déclarations) n'est volontairement pas modifiable ici). Le
-// statut actif/inactif (désactiver/réactiver, remplace la suppression pour
-// un cours qui a de l'historique) est réservé à qui peut gérer les cours —
-// voir canManageCourses (demande de Rene du 18.09.2026).
+// Modifie le nom, le jour, les horaires, le statut AJB et le·la titulaire
+// d'un cours existant — le nom/jour/horaire/AJB sont ouverts à l'admin, la
+// comptabilité et la direction (demande de Rene du 17.09.2026 : le code
+// (identifiant analytique unique, référencé par les déclarations) n'est
+// volontairement pas modifiable ici). Le statut actif/inactif (désactiver/
+// réactiver, remplace la suppression pour un cours qui a de l'historique)
+// et le changement de titulaire sont réservés à qui peut gérer les cours —
+// voir canManageCourses (demande de Rene du 18.09.2026 puis 18.09.2026
+// pour le titulaire — "l'info côté cours doit correspondre à l'info côté
+// prof", voir aussi la gestion symétrique depuis /admin/profs/[id]).
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
   if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
 
-  const course = await prisma.course.findUnique({ where: { id: params.id } });
+  const course = await prisma.course.findUnique({
+    where: { id: params.id },
+    include: { teacher: { select: { id: true, name: true } } },
+  });
   if (!course) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
 
   const body = await req.json();
-  const { nomCours, jour, heureDebut, heureFin, isAJB, active } = body;
+  const { nomCours, jour, heureDebut, heureFin, isAJB, active, teacherId } = body;
 
   if (nomCours !== undefined && (typeof nomCours !== "string" || !nomCours.trim())) {
     return NextResponse.json({ error: "Le nom du cours est requis." }, { status: 400 });
@@ -70,11 +77,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (jour !== undefined && jour !== null && jour !== "" && !(jour in JOUR_VERS_INDEX)) {
     return NextResponse.json({ error: "Jour de la semaine invalide." }, { status: 400 });
   }
-  if (active !== undefined && !canManageCourses(admin)) {
+  if ((active !== undefined || teacherId !== undefined) && !canManageCourses(admin)) {
     return NextResponse.json(
-      { error: "Non autorisé à désactiver/réactiver un cours." },
+      { error: "Non autorisé à désactiver/réactiver un cours ou à changer son·sa titulaire." },
       { status: 403 }
     );
+  }
+
+  let newTeacher: { id: string; name: string } | null = null;
+  if (teacherId !== undefined && teacherId !== null) {
+    const teacher = await prisma.teacher.findUnique({ where: { id: teacherId }, select: { id: true, name: true } });
+    if (!teacher) return NextResponse.json({ error: "Prof titulaire introuvable." }, { status: 400 });
+    newTeacher = teacher;
   }
 
   const updated = await prisma.course.update({
@@ -86,6 +100,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(heureFin !== undefined ? { heureFin: heureFin || null } : {}),
       ...(typeof isAJB === "boolean" ? { isAJB } : {}),
       ...(typeof active === "boolean" ? { active } : {}),
+      ...(teacherId !== undefined ? { teacherId: teacherId || null } : {}),
     },
     select: {
       id: true,
@@ -100,6 +115,33 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       teacher: { select: { id: true, name: true } },
     },
   });
+
+  if (typeof active === "boolean" && active !== course.active) {
+    await logAdminAction(admin, {
+      action: active ? "course.reactivated" : "course.deactivated",
+      entityType: "Course",
+      entityId: course.id,
+      description: `Cours ${active ? "réactivé" : "désactivé"} : ${updated.nomCours} (${updated.code})`,
+    });
+  }
+  if (typeof isAJB === "boolean" && isAJB !== course.isAJB) {
+    await logAdminAction(admin, {
+      action: isAJB ? "course.marked_ajb" : "course.unmarked_ajb",
+      entityType: "Course",
+      entityId: course.id,
+      description: `Cours ${isAJB ? "marqué" : "démarqué"} AJB : ${updated.nomCours} (${updated.code})`,
+    });
+  }
+  if (teacherId !== undefined && (course.teacher?.id ?? null) !== (newTeacher?.id ?? null)) {
+    await logAdminAction(admin, {
+      action: "course.teacher_changed",
+      entityType: "Course",
+      entityId: course.id,
+      description: `Titulaire du cours ${updated.nomCours} (${updated.code}) changé·e : ${
+        course.teacher?.name ?? "personne"
+      } → ${newTeacher?.name ?? "personne"}`,
+    });
+  }
 
   return NextResponse.json({ course: updated });
 }
@@ -120,7 +162,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 
   const course = await prisma.course.findUnique({
     where: { id: params.id },
-    select: { id: true, _count: { select: { declarationItems: true } } },
+    select: { id: true, nomCours: true, code: true, _count: { select: { declarationItems: true } } },
   });
   if (!course) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
 
@@ -132,5 +174,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   }
 
   await prisma.course.delete({ where: { id: params.id } });
+
+  await logAdminAction(admin, {
+    action: "course.deleted",
+    entityType: "Course",
+    entityId: course.id,
+    description: `Cours supprimé : ${course.nomCours} (${course.code})`,
+  });
+
   return NextResponse.json({ ok: true });
 }

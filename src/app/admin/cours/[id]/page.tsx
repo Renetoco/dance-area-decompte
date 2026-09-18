@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, canManageCourses } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AdminRole } from "@prisma/client";
 import { formatPeriodLabel } from "@/lib/dates";
 import CourseParticipants from "@/components/CourseParticipants";
 import CourseEditForm from "@/components/CourseEditForm";
+import CourseTeacherEditor from "@/components/CourseTeacherEditor";
 
 const TYPE_LABELS: Record<string, string> = {
   REMPLACEMENT_EFFECTUE: "Remplacement effectué",
@@ -46,11 +47,13 @@ export default async function FicheCoursPage({ params }: { params: { id: string 
     orderBy: { name: "asc" },
   });
 
-  const canEdit = admin.role === "ADMIN";
+  // Titulaire et musicien·nes/co-enseignant·es rattaché·es : réservé à qui
+  // peut gérer les cours (demande de Rene du 18.09.2026, voir
+  // canManageCourses ; auparavant réservé au seul compte ADMIN).
+  const canEdit = canManageCourses(admin);
   // Nom, jour et horaire du cours : ouvert à l'admin, la comptabilité et la
   // direction (demande de Rene du 17.09.2026) — distinct de `canEdit`
-  // ci-dessus, qui reste réservé à l'admin pour la gestion des
-  // musicien·nes/co-enseignant·es.
+  // ci-dessus.
   const canEditCourseFields =
     admin.role === "ADMIN" || admin.role === "COMPTABILITE" || admin.role === "DIRECTION";
 
@@ -87,14 +90,13 @@ export default async function FicheCoursPage({ params }: { params: { id: string 
       </div>
 
       <h2>Titulaire</h2>
-      {course.teacher ? (
-        <p>
-          <Link href={`/admin/profs/${course.teacher.id}`}>{course.teacher.name}</Link>
-          {course.teacher.role === "MUSICIEN" && <span className="badge info" style={{ marginLeft: 8 }}>Musicien·ne</span>}
-        </p>
-      ) : (
-        <p className="muted">Aucun·e titulaire renseigné·e pour ce cours.</p>
-      )}
+      <CourseTeacherEditor
+        courseId={course.id}
+        courseNomCours={course.nomCours}
+        initialTeacher={course.teacher ? { id: course.teacher.id, name: course.teacher.name } : null}
+        teachers={allTeachers}
+        canEdit={canEdit}
+      />
 
       <h2>Musicien·nes et co-enseignant·es rattaché·es</h2>
       <p className="muted" style={{ marginTop: -4 }}>

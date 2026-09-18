@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { logAdminAction } from "@/lib/auditLog";
 import { AdminRole } from "@prisma/client";
 
 /**
@@ -93,6 +94,14 @@ export async function POST(req: NextRequest) {
     });
     coursesImported += 1;
   }
+
+  await logAdminAction(admin, {
+    action: "import.annual_run",
+    entityType: "Course",
+    description: `Import annuel exécuté : ${teachersCreated} prof(s) créé·e(s), ${coursesImported} cours importé·s${
+      coursesSkipped > 0 ? `, ${coursesSkipped} ignoré·s (prof introuvable)` : ""
+    }`,
+  });
 
   return NextResponse.json({
     ok: true,

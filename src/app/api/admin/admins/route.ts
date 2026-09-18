@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin, generateTempPassword, hashPassword, isProtectedAdminEmail } from "@/lib/auth";
+import { logAdminAction } from "@/lib/auditLog";
 import { sendWelcomeEmail } from "@/lib/email";
 import { AdminRole } from "@prisma/client";
 
@@ -51,6 +52,13 @@ export async function POST(req: NextRequest) {
     emailSent = false;
     console.error("Échec d'envoi de l'email de bienvenue admin :", e);
   }
+
+  await logAdminAction(admin, {
+    action: "admin.created",
+    entityType: "AdminUser",
+    entityId: created.id,
+    description: `Compte backend créé : ${created.name} (${created.role}, ${created.email})`,
+  });
 
   // Le mot de passe temporaire est renvoyé une seule fois, à la création,
   // pour permettre de le communiquer directement (ex. démo, présentation)

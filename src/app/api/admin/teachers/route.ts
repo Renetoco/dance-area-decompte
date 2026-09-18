@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, canManageCourses } from "@/lib/auth";
+import { logAdminAction } from "@/lib/auditLog";
 import { AdminRole, TeacherRole } from "@prisma/client";
 
 export async function GET() {
@@ -32,9 +33,13 @@ export async function GET() {
 // d'en générer un qui pourrait entrer en collision avec le fichier Excel.
 // Créé sans email/mot de passe, comme un prof importé : on active le compte
 // ensuite via le même bouton "Activer" (email + mot de passe temporaire).
+// Réservé à qui peut gérer les cours (demande de Rene du 18.09.2026, voir
+// canManageCourses ; auparavant réservé au seul compte ADMIN).
 export async function POST(req: NextRequest) {
-  const admin = await requireAdmin([AdminRole.ADMIN]);
-  if (!admin) return NextResponse.json({ error: "Réservé à l'administrateur." }, { status: 403 });
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  if (!admin || !canManageCourses(admin)) {
+    return NextResponse.json({ error: "Non autorisé à ajouter un prof." }, { status: 403 });
+  }
 
   const { name, analyticCode, role } = await req.json();
   if (!name || typeof name !== "string" || !name.trim()) {
@@ -57,6 +62,13 @@ export async function POST(req: NextRequest) {
       role: role && role in TeacherRole ? (role as TeacherRole) : TeacherRole.ENSEIGNANT,
     },
     select: { id: true, analyticCode: true, name: true, email: true, active: true, role: true },
+  });
+
+  await logAdminAction(admin, {
+    action: "teacher.created",
+    entityType: "Teacher",
+    entityId: created.id,
+    description: `Prof créé·e : ${created.name} (${created.role === "MUSICIEN" ? "musicien·ne" : "enseignant·e"}, code ${created.analyticCode})`,
   });
 
   return NextResponse.json({ teacher: created });

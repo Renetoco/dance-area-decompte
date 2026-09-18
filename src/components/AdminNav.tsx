@@ -8,9 +8,11 @@ export default function AdminNav({ role }: { role: "ADMIN" | "COMPTABILITE" | "D
   const links = [
     { href: "/admin", label: "Vue d'ensemble", icon: "▤" },
     { href: "/admin/cours", label: "Cours", icon: "◎" },
+    { href: "/admin/profs", label: "Profs & musicien·nes", icon: "☺" },
   ];
   if (role === "ADMIN") {
     links.push({ href: "/admin/administration", label: "Administration", icon: "⚙" });
+    links.push({ href: "/admin/journal", label: "Journal", icon: "▦" });
   }
 
   return (

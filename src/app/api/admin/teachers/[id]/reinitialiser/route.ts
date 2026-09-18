@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin, generateTempPassword, hashPassword } from "@/lib/auth";
+import { requireAdmin, canManageCourses, generateTempPassword, hashPassword } from "@/lib/auth";
+import { logAdminAction } from "@/lib/auditLog";
 import { sendPasswordResetEmail } from "@/lib/email";
 import { AdminRole } from "@prisma/client";
 
+// Réservé à qui peut gérer les cours (demande de Rene du 18.09.2026, voir
+// canManageCourses ; auparavant réservé au seul compte ADMIN) — cohérent
+// avec le reste de la gestion des profs sur /admin/profs.
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN]);
-  if (!admin) return NextResponse.json({ error: "Réservé à l'administrateur." }, { status: 403 });
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  if (!admin || !canManageCourses(admin)) {
+    return NextResponse.json({ error: "Non autorisé à réinitialiser le mot de passe de ce prof." }, { status: 403 });
+  }
 
   const teacher = await prisma.teacher.findUnique({ where: { id: params.id } });
   if (!teacher || !teacher.email) {
@@ -17,6 +23,13 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   await prisma.teacher.update({
     where: { id: teacher.id },
     data: { passwordHash: await hashPassword(tempPassword), mustResetPwd: true },
+  });
+
+  await logAdminAction(admin, {
+    action: "teacher.password_reset",
+    entityType: "Teacher",
+    entityId: teacher.id,
+    description: `Mot de passe réinitialisé pour ${teacher.name}`,
   });
 
   try {

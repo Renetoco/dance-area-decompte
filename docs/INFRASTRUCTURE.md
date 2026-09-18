@@ -113,14 +113,24 @@ Hébergée chez **Neon** (PostgreSQL serverless). Le schéma est défini dans
   le total AJB du mois, comme les lignes `tardif` classiques.
 - **AdminUser** — comptes admin/comptabilité/direction, avec rôle
   (`ADMIN`, `COMPTABILITE`, `DIRECTION`). `canManageCourses` (réglage
-  individuel, indépendant du rôle) autorise en plus à ajouter, désactiver/
-  réactiver et supprimer des cours — voir section 5.
+  individuel, indépendant du rôle) autorise en plus à gérer les cours et
+  les profs/musicien·nes (ajout, désactivation/réactivation, suppression,
+  titulaire, rattachements) — voir section 5.
 - **ReminderLog** — trace de chaque email de rappel/notification envoyé
   (évite les doublons et sert d'historique).
 - **CronRun** — verrou technique : empêche le cron de rejouer deux fois la
   même action le même jour, même s'il est déclenché plusieurs fois.
 - **RateLimit** — compteur de tentatives (login, mot de passe oublié) pour
   la protection anti-brute-force (voir Sécurité).
+- **AdminActionLog** — journal des actions structurelles backend (cours,
+  profs, musicien·nes, comptes) — demande de Rene du 18.09.2026, pour
+  pouvoir tracer qui a modifié quoi et corriger en cas d'erreur, maintenant
+  que cette gestion est ouverte à plus de comptes. `adminName`/`adminRole`
+  sont dupliqués (pas de relation) pour rester lisibles même si le compte
+  est renommé ou supprimé plus tard. Écrit par `logAdminAction()` dans
+  `src/lib/auditLog.ts` (best-effort : un échec d'écriture du journal ne
+  fait jamais échouer l'action elle-même), consultable uniquement par
+  `ADMIN` sur `/admin/journal`.
 
 La suppression d'une `MonthlyDeclaration` supprime automatiquement ses
 `DeclarationItem` associés (cascade) — utilisé par le bouton admin
@@ -147,18 +157,30 @@ Deux types de comptes, avec la même mécanique de session (cookie signé,
   /api/admin/courses/[id]`, élargi le 17.09.2026 puis le 18.09.2026 pour
   le statut AJB) — le code du cours (identifiant analytique unique,
   référencé par les déclarations) n'est volontairement pas modifiable
-  depuis cet écran. La gestion des musicien·nes/co-enseignant·es reste
-  réservée à `ADMIN`.
+  depuis cet écran.
 
-  L'ajout, la désactivation/réactivation et la suppression de cours sont
-  réservés à `ADMIN`, ou à un compte `COMPTABILITE`/`DIRECTION` avec le
-  réglage individuel `canManageCourses` (voir `canManageCourses()` dans
-  `src/lib/auth.ts`) — accordé le 18.09.2026 à Aurélie, Laure et Marine,
-  sans l'ouvrir à tout le rôle pour éviter tout effet de bord sur
-  d'éventuels autres comptes. La suppression reste bloquée dès qu'un
-  changement a été déclaré sur le cours (pour ne jamais perdre
-  d'historique) — le bouton "Désactiver" (réversible via "Réactiver")
-  remplace la suppression dans ce cas.
+  L'ajout, la désactivation/réactivation et la suppression de cours et de
+  profs/musicien·nes, le changement de titulaire d'un cours, et les
+  rattachements musicien·ne/co-enseignant·e (sur la fiche du cours comme
+  sur la fiche du prof, les deux vues restant toujours cohérentes puisque
+  ce sont les mêmes endpoints) sont réservés à `ADMIN`, ou à un compte
+  `COMPTABILITE`/`DIRECTION` avec le réglage individuel `canManageCourses`
+  (voir `canManageCourses()` dans `src/lib/auth.ts`) — accordé le
+  18.09.2026 à Aurélie, Laure et Marine, sans l'ouvrir à tout le rôle pour
+  éviter tout effet de bord sur d'éventuels autres comptes ; élargi le
+  18.09.2026 de la seule gestion des cours à celle des profs/musicien·nes
+  (onglet `/admin/profs`, qui remplace l'ancien tableau "Comptes des
+  profs" réservé à `ADMIN` dans `/admin/administration`). La suppression
+  (cours ou prof) reste bloquée dès qu'un historique existe (changement
+  déclaré, participation, etc., pour ne jamais perdre de données) — le
+  bouton "Désactiver" (réversible via "Réactiver") remplace la suppression
+  dans ce cas. La gestion des comptes admin/comptabilité/direction
+  eux-mêmes (création, rôle, `canManageCourses`, désactivation) reste
+  réservée à `ADMIN` seul, sur `/admin/administration`.
+
+  Toutes ces actions structurelles sont enregistrées dans
+  `AdminActionLog` (voir section 4), consultable sur `/admin/journal`
+  (réservé à `ADMIN`).
 
 Deux comptes admin sont **protégés** dans le code (`isProtectedAdminEmail`
 dans `src/lib/auth.ts`) : `rene.torres@dancearea.ch` et
@@ -330,19 +352,30 @@ copié ces codes dans un gestionnaire de mots de passe — voir
   Export Excel (classeur complet ou sélection de profs cochés dans une
   grille dédiée) pour `ADMIN`, `COMPTABILITE` et `DIRECTION`.
 - `/admin/cours` : gestion des cours (modification pour les trois rôles ;
-  ajout, désactivation/réactivation et suppression pour `ADMIN` ou un
-  compte `canManageCourses` ; affectation d'un·e titulaire et de
-  participant·es supplémentaires réservée à `ADMIN`). Une case à cocher
-  permet d'afficher aussi les cours désactivés, pour les réactiver.
-- `/admin/administration` (réservé au rôle `ADMIN`) : QR code d'accès à
-  imprimer, import annuel du planning, gestion des comptes profs (dont la
-  case à cocher `ajbTeacher`), gestion des comptes admin/comptabilité/
-  direction (rôle, réglage `canManageCourses`, et les deux comptes
-  protégés qui ne peuvent être ni désactivés ni supprimés).
+  ajout, désactivation/réactivation, suppression, changement de titulaire
+  et gestion des participant·es supplémentaires réservés à `ADMIN` ou un
+  compte `canManageCourses`). Une case à cocher permet d'afficher aussi
+  les cours désactivés, pour les réactiver.
+- `/admin/profs` (ouvert aux trois rôles, comme `/admin/cours` ; remplace
+  l'ancien tableau "Comptes des profs" de `/admin/administration`) :
+  liste des profs et musicien·nes — ajout, changement de rôle, case
+  `ajbTeacher`, activation/réinitialisation de compte, désactivation/
+  suppression réservés à `ADMIN` ou un compte `canManageCourses`.
 - `/admin/profs/[id]` : fiche d'un prof — cours dont il/elle est
-  titulaire, interventions comme musicien·ne/co-enseignant·e, historique
-  complet de ses déclarations (avec bouton "Effacer" pour une déclaration
-  de test ou une erreur de saisie).
+  titulaire et interventions comme musicien·ne/co-enseignant·e
+  (ajout/retrait réservés à `ADMIN` ou un compte `canManageCourses` ; les
+  mêmes endpoints que `/admin/cours/[id]`, donc les deux vues restent
+  toujours cohérentes entre elles), historique complet de ses
+  déclarations (avec bouton "Effacer" pour une déclaration de test ou une
+  erreur de saisie).
+- `/admin/administration` (réservé au rôle `ADMIN`) : QR code d'accès à
+  imprimer, import annuel du planning, gestion des comptes admin/
+  comptabilité/direction (rôle, réglage `canManageCourses`, et les deux
+  comptes protégés qui ne peuvent être ni désactivés ni supprimés).
+- `/admin/journal` (réservé au rôle `ADMIN`) : historique chronologique de
+  toutes les actions structurelles backend (cours, profs, musicien·nes,
+  comptes) — qui a fait quoi et quand, pour pouvoir corriger en cas
+  d'erreur (voir `AdminActionLog` en section 4).
 
 Un bouton de thème clair/sombre est disponible sur l'ensemble de
 l'application (préférence mémorisée dans le navigateur).

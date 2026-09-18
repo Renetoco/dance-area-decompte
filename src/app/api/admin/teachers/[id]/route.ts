@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin, generateTempPassword, hashPassword } from "@/lib/auth";
+import { requireAdmin, canManageCourses, generateTempPassword, hashPassword } from "@/lib/auth";
+import { logAdminAction } from "@/lib/auditLog";
 import { sendWelcomeEmail } from "@/lib/email";
 import { AdminRole, TeacherRole } from "@prisma/client";
+
+const TEACHER_ROLE_LABELS: Record<TeacherRole, string> = {
+  ENSEIGNANT: "enseignant·e",
+  MUSICIEN: "musicien·ne",
+};
 
 // Fiche détaillée d'un prof : ses cours (titulaire + participations
 // musicien/co-prof) et son historique de déclarations, toutes périodes.
@@ -40,10 +46,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
 // Met à jour l'email (ce qui active le compte s'il n'existait pas encore
 // et envoie les identifiants), le rôle (enseignant/musicien) et/ou le
-// statut actif/inactif d'un prof.
+// statut actif/inactif d'un prof. Réservé à qui peut gérer les cours
+// (demande de Rene du 18.09.2026, voir canManageCourses ; auparavant
+// réservé au seul compte ADMIN).
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN]);
-  if (!admin) return NextResponse.json({ error: "Réservé à l'administrateur." }, { status: 403 });
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  if (!admin || !canManageCourses(admin)) {
+    return NextResponse.json({ error: "Non autorisé à modifier ce prof." }, { status: 403 });
+  }
 
   const teacher = await prisma.teacher.findUnique({ where: { id: params.id } });
   if (!teacher) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
@@ -97,6 +107,41 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     },
   });
 
+  if (typeof active === "boolean" && active !== teacher.active) {
+    await logAdminAction(admin, {
+      action: active ? "teacher.reactivated" : "teacher.deactivated",
+      entityType: "Teacher",
+      entityId: teacher.id,
+      description: `Prof ${active ? "réactivé·e" : "désactivé·e"} : ${updated.name}`,
+    });
+  }
+  if (role && role in TeacherRole && role !== teacher.role) {
+    await logAdminAction(admin, {
+      action: "teacher.role_changed",
+      entityType: "Teacher",
+      entityId: teacher.id,
+      description: `Rôle de ${updated.name} changé : ${TEACHER_ROLE_LABELS[teacher.role]} → ${TEACHER_ROLE_LABELS[role as TeacherRole]}`,
+    });
+  }
+  if (typeof ajbTeacher === "boolean" && ajbTeacher !== teacher.ajbTeacher) {
+    await logAdminAction(admin, {
+      action: ajbTeacher ? "teacher.marked_ajb" : "teacher.unmarked_ajb",
+      entityType: "Teacher",
+      entityId: teacher.id,
+      description: `${updated.name} ${ajbTeacher ? "marqué·e" : "démarqué·e"} comme donnant des cours AJB`,
+    });
+  }
+  if (email && updated.email !== teacher.email) {
+    await logAdminAction(admin, {
+      action: teacher.email ? "teacher.email_changed" : "teacher.activated",
+      entityType: "Teacher",
+      entityId: teacher.id,
+      description: teacher.email
+        ? `Email de ${updated.name} changé : ${teacher.email} → ${updated.email}`
+        : `Compte activé pour ${updated.name} (${updated.email})`,
+    });
+  }
+
   let emailSent: boolean | undefined;
   if (tempPassword && updated.email) {
     emailSent = true;
@@ -119,14 +164,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 // y a le moindre historique (cours, déclaration, intervention comme
 // musicien·ne, citation dans la déclaration d'un·e collègue), la suppression
 // est refusée pour ne jamais perdre de données : on désactive à la place.
+// Réservé à qui peut gérer les cours (demande de Rene du 18.09.2026, voir
+// canManageCourses ; auparavant réservé au seul compte ADMIN).
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN]);
-  if (!admin) return NextResponse.json({ error: "Réservé à l'administrateur." }, { status: 403 });
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  if (!admin || !canManageCourses(admin)) {
+    return NextResponse.json({ error: "Non autorisé à supprimer un prof." }, { status: 403 });
+  }
 
   const teacher = await prisma.teacher.findUnique({
     where: { id: params.id },
     select: {
       id: true,
+      name: true,
       _count: {
         select: {
           courses: true,
@@ -152,5 +202,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   }
 
   await prisma.teacher.delete({ where: { id: params.id } });
+
+  await logAdminAction(admin, {
+    action: "teacher.deleted",
+    entityType: "Teacher",
+    entityId: teacher.id,
+    description: `Prof supprimé·e : ${teacher.name}`,
+  });
+
   return NextResponse.json({ ok: true });
 }

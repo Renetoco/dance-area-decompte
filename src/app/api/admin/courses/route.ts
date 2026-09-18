@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin, canManageCourses } from "@/lib/auth";
+import { logAdminAction } from "@/lib/auditLog";
 import { AdminRole } from "@prisma/client";
 
 // Liste des cours, avec le·la titulaire et le nombre de participant·es
@@ -101,6 +102,13 @@ export async function POST(req: NextRequest) {
       isAJB: true,
       teacher: { select: { id: true, name: true } },
     },
+  });
+
+  await logAdminAction(admin, {
+    action: "course.created",
+    entityType: "Course",
+    entityId: created.id,
+    description: `Cours créé : ${created.nomCours} (${created.code})`,
   });
 
   return NextResponse.json({ course: created });

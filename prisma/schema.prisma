@@ -246,6 +246,27 @@ model CronRun {
   summary   String?
 }
 
+// Journal des actions structurelles faites depuis le backend (cours, profs,
+// musicien·nes, comptes) — demande de Rene du 18.09.2026 : depuis que la
+// gestion des cours/profs est ouverte à plus de comptes (voir
+// AdminUser.canManageCourses), il doit pouvoir voir qui a fait quoi et
+// remonter en arrière en cas d'erreur à corriger. adminName/adminRole sont
+// dupliqués (plutôt qu'une relation) pour que le journal reste lisible même
+// si le compte est renommé ou supprimé plus tard. Consultable uniquement
+// par un compte ADMIN (voir /admin/journal).
+model AdminActionLog {
+  id          String    @id @default(cuid())
+  adminName   String
+  adminRole   AdminRole
+  action      String // ex. "course.teacher_changed" — sert de filtre technique si besoin
+  entityType  String // "Course" | "Teacher" | "CourseParticipant" | "AdminUser"
+  entityId    String?
+  description String // résumé prêt à afficher, en français
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
 // Compteur générique de tentatives (login, mot de passe oublié, ...), clé
 // libre du type "login:email:x@y.com" ou "login:ip:1.2.3.4" — voir
 // src/lib/rateLimit.ts et SECURITY-REVIEW.md #2 / #5.

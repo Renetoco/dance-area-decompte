@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { AdminRole } from "@prisma/client";
-import AdminTeachers from "@/components/AdminTeachers";
 import AdminImport from "@/components/AdminImport";
 import AdminAccounts from "@/components/AdminAccounts";
 
@@ -27,8 +26,10 @@ export default async function AdministrationPage() {
 
       <h2>Import annuel du planning</h2>
       <AdminImport />
-      <h2>Comptes des profs</h2>
-      <AdminTeachers />
+      <p className="muted">
+        Les comptes des profs et musicien·nes se gèrent désormais depuis l'onglet{" "}
+        <a href="/admin/profs">Profs & musicien·nes</a>.
+      </p>
       <h2>Comptes comptabilité / direction / administrateur</h2>
       <AdminAccounts />
     </div>
