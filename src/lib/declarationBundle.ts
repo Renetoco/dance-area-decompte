@@ -35,6 +35,7 @@ export async function getDeclarationBundle(teacherId: string, teacherName: strin
     prisma.course.findMany({ where: { teacherId, active: true }, orderBy: { jour: "asc" } }),
     prisma.course.findMany({
       where: { teacherId: { not: teacherId }, active: true },
+      include: { teacher: { select: { id: true, name: true } } },
       orderBy: [{ nomCours: "asc" }],
     }),
     prisma.teacher.findMany({

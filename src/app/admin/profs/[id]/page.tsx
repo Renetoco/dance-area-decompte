@@ -108,6 +108,7 @@ export default async function FicheProfPage({ params }: { params: { id: string }
           jour: c.jour,
           heureDebut: c.heureDebut,
           heureFin: c.heureFin,
+          teacher: c.teacher,
         }))}
         canEdit={canEdit}
       />

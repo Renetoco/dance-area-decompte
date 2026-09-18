@@ -21,6 +21,7 @@ type Course = {
   jour: string | null;
   heureDebut: string | null;
   heureFin: string | null;
+  teacher?: { id: string; name: string } | null;
 };
 
 type Teacher = { id: string; name: string };
@@ -688,7 +689,8 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             <optgroup label="Autres cours de l'école">
               {bundle.otherCourses.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nomCours} ({c.code}) — {c.jour ? `${c.jour}${c.heureDebut ? ` ${c.heureDebut}–${c.heureFin ?? ""}` : ""}` : "sans jour fixe"}
+                  {c.nomCours} ({c.code}) — {c.jour ? `${c.jour}${c.heureDebut ? ` ${c.heureDebut}–${c.heureFin ?? ""}` : ""}` : "sans jour fixe"} —{" "}
+                  {c.teacher ? c.teacher.name : "sans titulaire"}
                 </option>
               ))}
             </optgroup>

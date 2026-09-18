@@ -148,8 +148,7 @@ export default function TeacherCourseManager({
               <option value="">— Ajouter un cours dont il/elle sera titulaire —</option>
               {options.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nomCours} ({c.code}) — {scheduleLabel(c)}
-                  {c.teacher ? ` — actuellement ${c.teacher.name}` : ""}
+                  {c.nomCours} ({c.code}) — {scheduleLabel(c)} — titulaire actuel·le : {c.teacher ? c.teacher.name : "aucun·e"}
                 </option>
               ))}
             </select>

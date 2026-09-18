@@ -12,7 +12,15 @@ type ParticipationRow = {
   course: { id: string; code: string; nomCours: string; jour: string | null; heureDebut: string | null; heureFin: string | null };
 };
 
-type CourseOption = { id: string; code: string; nomCours: string; jour: string | null; heureDebut: string | null; heureFin: string | null };
+type CourseOption = {
+  id: string;
+  code: string;
+  nomCours: string;
+  jour: string | null;
+  heureDebut: string | null;
+  heureFin: string | null;
+  teacher: { id: string; name: string } | null;
+};
 
 const ROLE_LABELS: Record<ParticipantRole, string> = {
   MUSICIEN: "Musicien·ne",
@@ -139,7 +147,7 @@ export default function TeacherParticipationManager({
               <option value="">— Ajouter une intervention sur un cours —</option>
               {options.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nomCours} ({c.code}) — {scheduleLabel(c)}
+                  {c.nomCours} ({c.code}) — {scheduleLabel(c)} — titulaire : {c.teacher ? c.teacher.name : "aucun·e"}
                 </option>
               ))}
             </select>
