@@ -3,7 +3,7 @@ import { getIronSession, IronSession } from "iron-session";
 import bcrypt from "bcryptjs";
 import { randomInt } from "crypto";
 import { prisma } from "./db";
-import type { AdminRole } from "@prisma/client";
+import type { AdminRole, AdminUser } from "@prisma/client";
 
 export type SessionData = {
   userType?: "teacher" | "admin";
@@ -85,6 +85,17 @@ export const PROTECTED_ADMIN_EMAILS = ["rene.torres@dancearea.ch", "anastasia@da
 
 export function isProtectedAdminEmail(email: string): boolean {
   return PROTECTED_ADMIN_EMAILS.includes(email.trim().toLowerCase());
+}
+
+/**
+ * Droit d'ajouter, désactiver/réactiver ou supprimer des cours — au-delà de
+ * la simple modification des champs (nom/jour/horaire/AJB), déjà ouverte à
+ * Comptabilité/Direction. Un compte ADMIN l'a toujours ; sinon il faut le
+ * réglage individuel AdminUser.canManageCourses (demande de Rene du
+ * 18.09.2026, accordé à Aurélie/Laure/Marine sans l'ouvrir à tout le rôle).
+ */
+export function canManageCourses(admin: Pick<AdminUser, "role" | "canManageCourses">): boolean {
+  return admin.role === "ADMIN" || admin.canManageCourses;
 }
 
 /** À utiliser dans les pages/route handlers protégées côté prof. */

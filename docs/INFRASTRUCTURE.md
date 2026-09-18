@@ -82,25 +82,39 @@ Hébergée chez **Neon** (PostgreSQL serverless). Le schéma est défini dans
   analytique de l'Excel source (clé pivot pour l'import annuel du
   planning). `role` distingue `ENSEIGNANT` (titulaire d'un cours) de
   `MUSICIEN` (accompagnateur·rice). `active` permet de désactiver un
-  compte sans le supprimer.
+  compte sans le supprimer. `ajbTeacher` (coché à la main, voir section 6)
+  fait apparaître le champ "cours AJB" et l'entrée tardive AJB dédiée dans
+  le décompte de ce prof.
 - **Course** — les cours du planning (code, catégorie, nom, jour, horaire,
-  quota, prof titulaire).
+  quota, prof titulaire). `isAJB` (coché à la main sur la fiche du cours)
+  sort ce cours du calcul automatique du·de la titulaire — voir section 6.
 - **CourseParticipant** — table de liaison pour les personnes
   supplémentaires rattachées à un cours (musicien·ne accompagnateur·rice,
-  co-enseignant·e), en plus du·de la titulaire.
+  co-enseignant·e), en plus du·de la titulaire. Pas concernée par
+  l'exclusion `isAJB` : un·e musicien·ne rattaché·e à un cours AJB continue
+  de déclarer normalement dessus.
 - **MonthlyDeclaration** — une déclaration = un·e prof + une période
   (`"2026-09"` = du 27 août au 26 septembre 2026 — voir "Période de paie"
   dans la section 6). Statut : `DRAFT` (en cours), `SUBMITTED_MANUAL`
   (soumis par le prof), `SUBMITTED_AUTO` (verrouillé automatiquement à la
-  date limite).
+  date limite). `ajbCourseCount` (nullable) = nombre de cours AJB donnés
+  pendant la période, saisi à la main par les profs `ajbTeacher` ; `null` =
+  pas encore rempli (0 cours AJB pris en compte tant que rien n'est saisi).
 - **DeclarationItem** — une ligne de changement dans une déclaration
   (remplacement effectué, absence remplacée/non remplacée, autre), liée
   au cours concerné, à la date, à l'autre prof éventuellement impliqué, aux
   heures et à un commentaire. Le champ `tardif` marque une ligne saisie
   après la date limite mais avant la fin de la période (voir section 6) —
   la déclaration déjà soumise n'est pas rouverte pour l'accueillir.
+- **AjbLateEntry** — un cours AJB donné en dernière minute (20-26), saisi
+  en texte libre (date, heure, nom du cours, commentaire) plutôt que
+  rattaché à un `Course` existant, puisque les remplacements AJB ne
+  correspondent pas toujours à une séance planifiée. Compte pour +1 dans
+  le total AJB du mois, comme les lignes `tardif` classiques.
 - **AdminUser** — comptes admin/comptabilité/direction, avec rôle
-  (`ADMIN`, `COMPTABILITE`, `DIRECTION`).
+  (`ADMIN`, `COMPTABILITE`, `DIRECTION`). `canManageCourses` (réglage
+  individuel, indépendant du rôle) autorise en plus à ajouter, désactiver/
+  réactiver et supprimer des cours — voir section 5.
 - **ReminderLog** — trace de chaque email de rappel/notification envoyé
   (évite les doublons et sert d'historique).
 - **CronRun** — verrou technique : empêche le cron de rejouer deux fois la
@@ -128,12 +142,23 @@ Deux types de comptes, avec la même mécanique de session (cookie signé,
   - `DIRECTION` — tableau de bord des déclarations + export Excel (même
     accès que `COMPTABILITE`, élargi le 16.09.2026 pour Anastasia).
 
-  Les trois rôles peuvent modifier le nom, le jour et l'horaire d'un cours
-  existant depuis sa fiche (`PATCH /api/admin/courses/[id]`, élargi le
-  17.09.2026) — le code du cours (identifiant analytique unique, référencé
-  par les déclarations) n'est volontairement pas modifiable depuis cet
-  écran. La création/suppression de cours et la gestion des
-  musicien·nes/co-enseignant·es restent réservées à `ADMIN`.
+  Les trois rôles peuvent modifier le nom, le jour, l'horaire et le
+  statut AJB d'un cours existant depuis sa fiche (`PATCH
+  /api/admin/courses/[id]`, élargi le 17.09.2026 puis le 18.09.2026 pour
+  le statut AJB) — le code du cours (identifiant analytique unique,
+  référencé par les déclarations) n'est volontairement pas modifiable
+  depuis cet écran. La gestion des musicien·nes/co-enseignant·es reste
+  réservée à `ADMIN`.
+
+  L'ajout, la désactivation/réactivation et la suppression de cours sont
+  réservés à `ADMIN`, ou à un compte `COMPTABILITE`/`DIRECTION` avec le
+  réglage individuel `canManageCourses` (voir `canManageCourses()` dans
+  `src/lib/auth.ts`) — accordé le 18.09.2026 à Aurélie, Laure et Marine,
+  sans l'ouvrir à tout le rôle pour éviter tout effet de bord sur
+  d'éventuels autres comptes. La suppression reste bloquée dès qu'un
+  changement a été déclaré sur le cours (pour ne jamais perdre
+  d'historique) — le bouton "Désactiver" (réversible via "Réactiver")
+  remplace la suppression dans ce cas.
 
 Deux comptes admin sont **protégés** dans le code (`isProtectedAdminEmail`
 dans `src/lib/auth.ts`) : `rene.torres@dancearea.ch` et
@@ -164,7 +189,7 @@ fois le même jour :
 | Le 27 du mois (début de la période) | Crée une déclaration vierge (`DRAFT`) pour chaque prof actif |
 | Le 16 à 9h (J-4) | Envoie un rappel par email aux profs dont la déclaration du mois est encore totalement vide (aucune entrée, aucune réponse à "y a-t-il eu des changements ?") |
 | Le 20 à 9h (J-0, matin de la date limite) | Dernier rappel : envoyé à tous les profs n'ayant pas encore soumis manuellement, même avec un brouillon en cours (dernier filet avant la clôture) |
-| Le 20 à 21h (date limite) | Verrouille toutes les déclarations non soumises manuellement, les marque `SUBMITTED_AUTO`, et notifie chaque prof par email |
+| Le 20 à 21h (date limite) | Verrouille toutes les déclarations non soumises manuellement, les marque `SUBMITTED_AUTO`, notifie chaque prof par email, puis envoie le mail de clôture (résumé + Excel) à Admin/Comptabilité/Direction |
 
 ### Période de paie (27 → 26) et fenêtre tardive
 
@@ -190,21 +215,55 @@ date limite de soumission (le 20) :
 - **Après le 26** : la période est totalement close, plus aucune saisie
   n'est possible (ni normale, ni tardive).
 
+### Cours AJB (Area Jeune Ballet)
+
+Demande de la comptabilité du 18.09.2026 : les cours AJB changent trop
+souvent (jours, horaires, profs) pour être comptés de façon fiable par le
+calendrier prévisionnel automatique. Un cours coché `isAJB` (sur sa fiche,
+section 5) sort donc du calcul automatique du·de la titulaire — mais pas
+des participations en tant que musicien·ne/co-enseignant·e
+(`CourseParticipant`), qui continuent de fonctionner normalement.
+
+Pour compenser, chaque prof marqué `ajbTeacher` (coché à la main sur sa
+fiche) voit apparaître dans son décompte :
+- un champ chiffré **"cours AJB donnés"** (`MonthlyDeclaration.ajbCourseCount`),
+  ajouté directement au total du mois ; `null` (rien saisi) = 0 pris en
+  compte — volontaire, pour inciter à toujours remplir ce champ ;
+- entre la date limite (20 à 21h) et la fin de la période (26 à 23h59),
+  une option **"cours AJB tardif"** distincte du changement tardif général
+  (texte libre pour le nom du cours, plus date/heure/commentaire —
+  `AjbLateEntry`), qui déclenche la même alerte email à
+  `COMPTABILITE`/`DIRECTION` que les autres entrées tardives et compte
+  elle aussi pour +1 dans le total du mois.
+
+Le rappel par email de ces profs inclut un paragraphe spécifique
+expliquant tout ceci. Le résumé Excel (colonnes "Cours AJB (mois)" et
+"AJB rempli ?") et le mail de clôture (section 7) permettent à la
+comptabilité de repérer d'un coup d'œil qui a bien rempli son champ.
+
 ## 7. Emails
 
-Cinq types d'emails, tous envoyés via `src/lib/email.ts` (SMTP
+Sept types d'emails, tous envoyés via `src/lib/email.ts` (SMTP
 Infomaniak, adresse d'expédition configurable via `MAIL_FROM`) :
 
 1. **Bienvenue** — à la création d'un compte, avec identifiant + mot de
    passe temporaire.
 2. **Réinitialisation** — après un "mot de passe oublié", nouveau mot de
    passe temporaire.
-3. **Rappel** (J-4 puis le matin de J-0) — avant la date limite.
+3. **Rappel** (J-4 puis le matin de J-0) — avant la date limite ; inclut un
+   paragraphe spécifique pour les profs `ajbTeacher` (voir section 6).
 4. **Notification de soumission automatique** — après la date limite, si
    la déclaration a été verrouillée sans action du prof.
 5. **Alerte entrée tardive** — aux comptes `COMPTABILITE`/`DIRECTION`,
    quand un prof signale un changement après la date limite (voir
    "Période de paie et fenêtre tardive" en section 6).
+6. **Alerte cours AJB tardif** — même principe que l'alerte entrée tardive
+   ci-dessus, spécifique aux cours AJB signalés en texte libre (voir
+   "Cours AJB" en section 6).
+7. **Mail de clôture** — à Admin/Comptabilité/Direction, juste après le
+   verrouillage du 20 à 21h : fichier Excel du cycle en pièce jointe, plus
+   un résumé dans le corps (envois auto/manuels, profs ayant déclaré des
+   changements, profs `ajbTeacher` ayant rempli ou non leur champ AJB).
 
 Les noms de profs sont échappés avant insertion dans le HTML de l'email
 (protection contre l'injection de balisage).
@@ -254,6 +313,9 @@ copié ces codes dans un gestionnaire de mots de passe — voir
   heures se pré-remplissent automatiquement selon le jour/horaire habituel
   du cours choisi, restent modifiables), autre prof éventuellement
   impliqué, commentaire.
+- Pour les profs `ajbTeacher` : un champ dédié "cours AJB donnés" (ajouté
+  directement au total du mois), et entre la date limite et la fin de la
+  période, une option "cours AJB tardif" à part (voir section 6).
 - Après la deadline, la déclaration devient lecture seule ; un bouton
   "Voir l'historique" (`/prof/historique`) permet de consulter les mois
   précédents.
@@ -267,12 +329,16 @@ copié ces codes dans un gestionnaire de mots de passe — voir
   un prof correspondent à ce que l'autre prof cité a lui-même déclaré.
   Export Excel (classeur complet ou sélection de profs cochés dans une
   grille dédiée) pour `ADMIN`, `COMPTABILITE` et `DIRECTION`.
-- `/admin/cours` : gestion des cours (ajout, modification, désactivation,
-  affectation d'un·e titulaire et de participant·es supplémentaires).
+- `/admin/cours` : gestion des cours (modification pour les trois rôles ;
+  ajout, désactivation/réactivation et suppression pour `ADMIN` ou un
+  compte `canManageCourses` ; affectation d'un·e titulaire et de
+  participant·es supplémentaires réservée à `ADMIN`). Une case à cocher
+  permet d'afficher aussi les cours désactivés, pour les réactiver.
 - `/admin/administration` (réservé au rôle `ADMIN`) : QR code d'accès à
-  imprimer, import annuel du planning, gestion des comptes profs, gestion
-  des comptes admin/comptabilité/direction (avec les deux comptes protégés
-  qui ne peuvent être ni désactivés ni supprimés).
+  imprimer, import annuel du planning, gestion des comptes profs (dont la
+  case à cocher `ajbTeacher`), gestion des comptes admin/comptabilité/
+  direction (rôle, réglage `canManageCourses`, et les deux comptes
+  protégés qui ne peuvent être ni désactivés ni supprimés).
 - `/admin/profs/[id]` : fiche d'un prof — cours dont il/elle est
   titulaire, interventions comme musicien·ne/co-enseignant·e, historique
   complet de ses déclarations (avec bouton "Effacer" pour une déclaration

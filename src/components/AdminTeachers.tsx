@@ -13,6 +13,7 @@ type Teacher = {
   active: boolean;
   mustResetPwd: boolean;
   role: TeacherRole;
+  ajbTeacher: boolean;
   _count: { courses: number };
 };
 
@@ -129,6 +130,20 @@ export default function AdminTeachers() {
     }
   }
 
+  async function toggleAjb(t: Teacher) {
+    setBusyId(t.id);
+    try {
+      await fetch(`/api/admin/teachers/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ajbTeacher: !t.ajbTeacher }),
+      });
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function reinitialiser(id: string) {
     setBusyId(id);
     setMessage(null);
@@ -201,6 +216,7 @@ export default function AdminTeachers() {
               <th>Nom</th>
               <th>Rôle</th>
               <th>Cours</th>
+              <th title="Donne des cours AJB (Area Jeune Ballet) — fait apparaître le champ dédié dans son décompte">AJB</th>
               <th>Email / compte</th>
               <th>Statut</th>
               <th>Actions</th>
@@ -230,6 +246,15 @@ export default function AdminTeachers() {
                     </select>
                   </td>
                   <td>{t._count.courses}</td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={t.ajbTeacher}
+                      disabled={busyId === t.id}
+                      onChange={() => toggleAjb(t)}
+                      title="Donne des cours AJB"
+                    />
+                  </td>
                   <td>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <input

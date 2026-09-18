@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { occurrenceDatesInPeriod } from "@/lib/dates";
 
@@ -38,12 +38,22 @@ type Item = {
   tardif: boolean;
 };
 
+type AjbLateEntryT = {
+  id: string;
+  date: string | null;
+  heure: string | null;
+  nomCours: string;
+  comment: string | null;
+};
+
 type Declaration = {
   id: string;
   hasChanges: boolean | null;
   status: DeclarationStatus;
   submittedAt: string | null;
   items: Item[];
+  ajbCourseCount: number | null;
+  ajbLateEntries: AjbLateEntryT[];
 };
 
 export type Bundle = {
@@ -54,6 +64,7 @@ export type Bundle = {
   locked: boolean;
   lateWindowOpen: boolean;
   lateWindowEndLabel: string;
+  isAjbTeacher: boolean;
   declaration: Declaration;
   myCourses: Course[];
   otherCourses: Course[];
@@ -105,8 +116,24 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState<string | null>(null); // "new" | item id | null
   const [form, setForm] = useState(emptyForm);
+  // Message de confirmation affiché juste après l'envoi d'un changement
+  // tardif (demande de Rene du 17.09.2026) — reste visible tant que le prof
+  // ne l'a pas fermé, pour être sûr qu'il/elle le voie.
+  const [lateConfirmationVisible, setLateConfirmationVisible] = useState(false);
+  // Champ "cours AJB donnés" (demande de Rene du 18.09.2026) — brouillon
+  // local tant que le prof n'a pas cliqué sur "Enregistrer", pour ne pas
+  // envoyer une requête à chaque frappe.
+  const [ajbDraft, setAjbDraft] = useState(initialBundle.declaration.ajbCourseCount);
+  const [ajbBusy, setAjbBusy] = useState(false);
+  const [showAjbLateForm, setShowAjbLateForm] = useState(false);
+  const [ajbLateForm, setAjbLateForm] = useState({ date: "", heure: "", nomCours: "", comment: "" });
+  const [ajbLateConfirmationVisible, setAjbLateConfirmationVisible] = useState(false);
 
   const { declaration, locked } = bundle;
+
+  useEffect(() => {
+    setAjbDraft(declaration.ajbCourseCount);
+  }, [declaration.id, declaration.ajbCourseCount]);
 
   async function refresh() {
     const res = await fetch("/api/declarations");
@@ -154,6 +181,7 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
   function openLateForm() {
     setForm(emptyForm);
     setShowForm("late-new");
+    setLateConfirmationVisible(false);
   }
 
   function openEditForm(item: Item) {
@@ -180,6 +208,7 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         otherTeacherFreeText: form.otherTeacherId ? null : form.otherTeacherFreeText || null,
         comment: form.comment || null,
       };
+      const wasLate = showForm === "late-new";
       const isNew = showForm === "new" || showForm === "late-new";
       const url = isNew ? "/api/declarations/items" : `/api/declarations/items/${showForm}`;
       const method = isNew ? "POST" : "PATCH";
@@ -193,6 +222,7 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         return;
       }
       setShowForm(null);
+      if (wasLate) setLateConfirmationVisible(true);
       await refresh();
     } finally {
       setBusy(false);
@@ -207,6 +237,58 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
       await refresh();
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function saveAjbCourseCount() {
+    setAjbBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/declarations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ajbCourseCount: ajbDraft }),
+      });
+      if (!res.ok) {
+        setError((await res.json()).error);
+        return;
+      }
+      await refresh();
+    } finally {
+      setAjbBusy(false);
+    }
+  }
+
+  async function saveAjbLateEntry() {
+    setAjbBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/declarations/ajb-late", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ajbLateForm),
+      });
+      if (!res.ok) {
+        setError((await res.json()).error);
+        return;
+      }
+      setShowAjbLateForm(false);
+      setAjbLateForm({ date: "", heure: "", nomCours: "", comment: "" });
+      setAjbLateConfirmationVisible(true);
+      await refresh();
+    } finally {
+      setAjbBusy(false);
+    }
+  }
+
+  async function deleteAjbLateEntry(id: string) {
+    if (!confirm("Supprimer cette ligne ?")) return;
+    setAjbBusy(true);
+    try {
+      await fetch(`/api/declarations/ajb-late/${id}`, { method: "DELETE" });
+      await refresh();
+    } finally {
+      setAjbBusy(false);
     }
   }
 
@@ -266,6 +348,143 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
         </div>
       ) : null}
 
+      {bundle.isAjbTeacher && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Cours AJB (Area Jeune Ballet)</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Les cours AJB changent trop souvent (jours, horaires, profs) pour être comptés automatiquement.
+            Indiquez ici le nombre de cours AJB donnés pendant la période — sans cette information, aucun cours
+            AJB ne sera pris en compte sur votre fiche de salaire.
+          </p>
+          {canEdit ? (
+            <div className="btn-row" style={{ alignItems: "center" }}>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                style={{ width: 100 }}
+                value={ajbDraft ?? ""}
+                onChange={(e) => setAjbDraft(e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
+                placeholder="0"
+              />
+              <button
+                className="btn small"
+                disabled={ajbBusy || ajbDraft === declaration.ajbCourseCount}
+                onClick={saveAjbCourseCount}
+              >
+                Enregistrer
+              </button>
+              {declaration.ajbCourseCount === null && (
+                <span className="badge warning">Pas encore rempli</span>
+              )}
+            </div>
+          ) : (
+            <p style={{ fontWeight: 600 }}>
+              {declaration.ajbCourseCount !== null
+                ? `${declaration.ajbCourseCount} cours AJB déclaré(s) pour cette période.`
+                : "Champ non rempli — aucun cours AJB pris en compte pour cette période."}
+            </p>
+          )}
+        </div>
+      )}
+
+      {locked && bundle.lateWindowOpen && bundle.isAjbTeacher && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Un cours AJB donné en dernière minute ?</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Signalez ici un cours AJB donné après le {bundle.deadlineLabel}, jusqu'au {bundle.lateWindowEndLabel}.
+            La comptabilité sera automatiquement prévenue et décidera si ce cours est pris en compte sur le
+            salaire de ce mois-ci ou du suivant.
+          </p>
+
+          {ajbLateConfirmationVisible && (
+            <div className="card nested" style={{ borderLeft: "3px solid var(--accent)" }}>
+              <p style={{ margin: 0 }}>
+                <strong>C'est noté.</strong> Ce cours AJB a été envoyé hors délai : le service comptabilité en a
+                été averti. Il sera étudié et, selon les possibilités, pris en compte sur le salaire de ce mois-ci
+                — sinon, ce sera sur celui du mois suivant.
+              </p>
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <button className="btn secondary small" onClick={() => setAjbLateConfirmationVisible(false)}>
+                  Compris
+                </button>
+              </div>
+            </div>
+          )}
+
+          {declaration.ajbLateEntries.length === 0 && !showAjbLateForm && !ajbLateConfirmationVisible && (
+            <p className="muted">Aucun cours AJB tardif signalé pour l'instant.</p>
+          )}
+          {declaration.ajbLateEntries.map((entry) => (
+            <div key={entry.id} className="card nested">
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <p style={{ fontWeight: 600, margin: 0 }}>{entry.nomCours}</p>
+                <span className="badge warning">Tardif</span>
+              </div>
+              {(entry.date || entry.heure) && (
+                <p className="muted" style={{ margin: "4px 0" }}>
+                  {entry.date ? entry.date.slice(0, 10) : ""} {entry.heure ?? ""}
+                </p>
+              )}
+              {entry.comment && <p className="muted" style={{ margin: "4px 0" }}>Commentaire : {entry.comment}</p>}
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <button className="btn danger small" onClick={() => deleteAjbLateEntry(entry.id)}>
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {!showAjbLateForm ? (
+            <button className="btn secondary" onClick={() => { setShowAjbLateForm(true); setAjbLateConfirmationVisible(false); }}>
+              + Signaler un cours AJB tardif
+            </button>
+          ) : (
+            <div className="card nested">
+              <label>Nom du cours</label>
+              <input
+                value={ajbLateForm.nomCours}
+                onChange={(e) => setAjbLateForm({ ...ajbLateForm, nomCours: e.target.value })}
+                placeholder="ex. Ballet Boys (Juan)"
+              />
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label>Date</label>
+                  <input
+                    type="date"
+                    value={ajbLateForm.date}
+                    onChange={(e) => setAjbLateForm({ ...ajbLateForm, date: e.target.value })}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label>Heure</label>
+                  <input
+                    type="time"
+                    value={ajbLateForm.heure}
+                    onChange={(e) => setAjbLateForm({ ...ajbLateForm, heure: e.target.value })}
+                  />
+                </div>
+              </div>
+              <label>Commentaire</label>
+              <textarea
+                rows={3}
+                value={ajbLateForm.comment}
+                onChange={(e) => setAjbLateForm({ ...ajbLateForm, comment: e.target.value })}
+                placeholder="Expliquez le changement (remplacement, cours ajouté, etc.)"
+              />
+              <div className="btn-row" style={{ marginTop: 12 }}>
+                <button className="btn secondary" onClick={() => setShowAjbLateForm(false)} disabled={ajbBusy}>
+                  Annuler
+                </button>
+                <button className="btn" onClick={saveAjbLateEntry} disabled={ajbBusy || !ajbLateForm.nomCours.trim()}>
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {locked && bundle.lateWindowOpen && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Un changement de dernière minute ?</h2>
@@ -275,7 +494,22 @@ export default function ProfDeclarationForm({ initialBundle }: { initialBundle: 
             part et est transmis à la comptabilité.
           </p>
 
-          {lateItems.length === 0 && showForm !== "late-new" && (
+          {lateConfirmationVisible && (
+            <div className="card nested" style={{ borderLeft: "3px solid var(--accent)" }}>
+              <p style={{ margin: 0 }}>
+                <strong>C'est noté.</strong> Cette entrée a été envoyée hors délai : le service comptabilité en a été
+                averti. Elle sera étudiée et, selon les possibilités, prise en compte sur le salaire de ce mois-ci —
+                sinon, ce sera sur celui du mois suivant.
+              </p>
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <button className="btn secondary small" onClick={() => setLateConfirmationVisible(false)}>
+                  Compris
+                </button>
+              </div>
+            </div>
+          )}
+
+          {lateItems.length === 0 && showForm !== "late-new" && !lateConfirmationVisible && (
             <p className="muted">Aucun changement tardif signalé pour l'instant.</p>
           )}
           {lateItems.map((item) => (

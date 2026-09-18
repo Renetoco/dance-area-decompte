@@ -68,6 +68,13 @@ model Teacher {
   // pour un cours de danse classique) — voir CourseParticipant pour le lien
   // avec les cours qu'iel accompagne sans en être titulaire.
   role          TeacherRole @default(ENSEIGNANT)
+  // Donne au moins un cours "Area Jeune Ballet" (AJB) — coché à la main par
+  // l'admin (demande de Rene du 18.09.2026 : ces cours changent trop souvent
+  // pour être détectés automatiquement de façon fiable). Fait apparaître,
+  // dans le décompte de ce prof, le champ "cours AJB donnés" et l'option
+  // d'entrée tardive AJB — voir MonthlyDeclaration.ajbCourseCount et
+  // AjbLateEntry.
+  ajbTeacher    Boolean     @default(false)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -91,6 +98,13 @@ model Course {
   heureFin    String? // "21:30"
   quota       Int?
   active      Boolean  @default(true)
+  // Cours "Area Jeune Ballet" : trop de changements/remplacements pour être
+  // compté automatiquement (demande de Rene du 18.09.2026). Coché à la main
+  // sur la fiche du cours — dès que c'est coché, ce cours sort du calendrier
+  // prévisionnel du·de la titulaire (voir payroll.ts) ; les musicien·nes
+  // rattaché·es (CourseParticipant) ne sont pas concerné·es par l'exclusion,
+  // iels continuent de déclarer normalement dessus.
+  isAJB       Boolean  @default(false)
 
   teacherId   String?
   teacher     Teacher? @relation(fields: [teacherId], references: [id])
@@ -125,10 +139,17 @@ model MonthlyDeclaration {
   submittedAt    DateTime?
   reopenedAt     DateTime? // trace d'une réouverture exceptionnelle par un admin
   reopenedBy     String?
+  // Nombre de cours AJB donnés pendant la période, saisi à la main par les
+  // profs concerné·es (Teacher.ajbTeacher) puisque ces cours ne sont plus
+  // comptés automatiquement — voir payroll.ts. null = pas encore rempli (=
+  // 0 cours AJB pris en compte tant que rien n'est saisi, demande de Rene
+  // du 18.09.2026) ; distinct de 0 (rempli, aucun cours donné ce mois-ci).
+  ajbCourseCount Int?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
   items          DeclarationItem[]
+  ajbLateEntries AjbLateEntry[]
 
   @@unique([teacherId, period])
   @@index([period])
@@ -162,6 +183,28 @@ model DeclarationItem {
   updatedAt       DateTime           @updatedAt
 }
 
+// Changement AJB de dernière minute (entre le 20 et le 26, voir
+// isWithinLateWindow dans dates.ts) — distinct de DeclarationItem car un
+// cours AJB donné en dernière minute ne correspond pas forcément à un cours
+// existant du planning (remplacements trop fréquents pour être listés) :
+// le prof décrit lui/elle-même le cours en texte libre plutôt que de le
+// choisir dans une liste. Chaque entrée compte pour +1 dans le total AJB du
+// mois (voir payroll.ts), comme les autres lignes tardives — la
+// comptabilité/direction (alertée par email) décide de l'inclure ce
+// mois-ci ou de la reporter.
+model AjbLateEntry {
+  id            String             @id @default(cuid())
+  declarationId String
+  declaration   MonthlyDeclaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+
+  date          DateTime?
+  heure         String? // "14:30" — pas de cours fixe associé, donc pas de jour de semaine à en déduire
+  nomCours      String // texte libre : nom du cours AJB donné
+  comment       String?
+
+  createdAt     DateTime           @default(now())
+}
+
 model AdminUser {
   id           String    @id @default(cuid())
   name         String
@@ -174,6 +217,13 @@ model AdminUser {
   // réinitialisation, pour forcer un changement au prochain login — voir
   // SECURITY-REVIEW.md #8.
   mustResetPwd Boolean   @default(false)
+  // Réglage individuel (indépendant du rôle) : autorise à ajouter, désactiver/
+  // réactiver et supprimer des cours, en plus de la modification des
+  // champs déjà ouverte à Comptabilité/Direction — demande de Rene du
+  // 18.09.2026 pour Aurélie, Laure et Marine, sans l'ouvrir à tout le rôle
+  // Comptabilité/Direction (effet de bord sur d'éventuels autres comptes).
+  // Un compte ADMIN a de toute façon tous les droits, avec ou sans ce flag.
+  canManageCourses Boolean @default(false)
   createdAt    DateTime  @default(now())
 }
 

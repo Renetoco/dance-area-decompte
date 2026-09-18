@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, canManageCourses } from "@/lib/auth";
 import { JOUR_VERS_INDEX } from "@/lib/dates";
 import { AdminRole } from "@prisma/client";
 
@@ -47,10 +47,13 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json({ course: { ...courseFields, history } });
 }
 
-// Modifie le nom, le jour et les horaires d'un cours existant — ouvert à
-// l'admin, la comptabilité et la direction (demande de Rene du
-// 17.09.2026 : le code (identifiant analytique unique, référencé par les
-// déclarations) n'est volontairement pas modifiable ici).
+// Modifie le nom, le jour, les horaires et le statut AJB d'un cours
+// existant — ouvert à l'admin, la comptabilité et la direction (demande de
+// Rene du 17.09.2026 : le code (identifiant analytique unique, référencé
+// par les déclarations) n'est volontairement pas modifiable ici). Le
+// statut actif/inactif (désactiver/réactiver, remplace la suppression pour
+// un cours qui a de l'historique) est réservé à qui peut gérer les cours —
+// voir canManageCourses (demande de Rene du 18.09.2026).
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
   if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
@@ -59,13 +62,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!course) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
 
   const body = await req.json();
-  const { nomCours, jour, heureDebut, heureFin } = body;
+  const { nomCours, jour, heureDebut, heureFin, isAJB, active } = body;
 
   if (nomCours !== undefined && (typeof nomCours !== "string" || !nomCours.trim())) {
     return NextResponse.json({ error: "Le nom du cours est requis." }, { status: 400 });
   }
   if (jour !== undefined && jour !== null && jour !== "" && !(jour in JOUR_VERS_INDEX)) {
     return NextResponse.json({ error: "Jour de la semaine invalide." }, { status: 400 });
+  }
+  if (active !== undefined && !canManageCourses(admin)) {
+    return NextResponse.json(
+      { error: "Non autorisé à désactiver/réactiver un cours." },
+      { status: 403 }
+    );
   }
 
   const updated = await prisma.course.update({
@@ -75,6 +84,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(jour !== undefined ? { jour: jour || null } : {}),
       ...(heureDebut !== undefined ? { heureDebut: heureDebut || null } : {}),
       ...(heureFin !== undefined ? { heureFin: heureFin || null } : {}),
+      ...(typeof isAJB === "boolean" ? { isAJB } : {}),
+      ...(typeof active === "boolean" ? { active } : {}),
     },
     select: {
       id: true,
@@ -84,6 +95,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       jour: true,
       heureDebut: true,
       heureFin: true,
+      isAJB: true,
+      active: true,
       teacher: { select: { id: true, name: true } },
     },
   });
@@ -95,10 +108,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 // changement déclaré dessus (créés par erreur, doublon, etc.). Les
 // participant·es supplémentaires (musicien·nes, co-profs) sont retiré·es en
 // même temps, mais dès qu'un changement a été déclaré sur ce cours, la
-// suppression est refusée pour ne jamais perdre d'historique.
+// suppression est refusée pour ne jamais perdre d'historique — on désactive
+// à la place (PATCH { active: false } ci-dessus). Réservé à l'admin, ou à
+// un compte comptabilité/direction avec le réglage "gérer les cours" (voir
+// canManageCourses, demande de Rene du 18.09.2026).
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN]);
-  if (!admin) return NextResponse.json({ error: "Réservé à l'administrateur." }, { status: 403 });
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  if (!admin || !canManageCourses(admin)) {
+    return NextResponse.json({ error: "Non autorisé à supprimer des cours." }, { status: 403 });
+  }
 
   const course = await prisma.course.findUnique({
     where: { id: params.id },

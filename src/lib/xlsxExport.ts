@@ -89,10 +89,12 @@ function buildResumeSheet(workbook: ExcelJS.Workbook, rows: PayrollTeacherRow[])
     { header: "Lignes à vérifier", key: "aVerifier", width: 16 },
     { header: "Décompte modifié ?", key: "modifie", width: 20 },
     { header: "Entrées tardives", key: "tardif", width: 16 },
+    { header: "Cours AJB (mois)", key: "ajbTotal", width: 16 },
+    { header: "AJB rempli ?", key: "ajbRempli", width: 14 },
     { header: "Statut de la déclaration", key: "statut", width: 28 },
   ];
   resume.getRow(1).font = HEADER_FONT;
-  resume.autoFilter = { from: "A1", to: "K1" };
+  resume.autoFilter = { from: "A1", to: "M1" };
 
   for (const r of rows) {
     resume.addRow({
@@ -111,6 +113,16 @@ function buildResumeSheet(workbook: ExcelJS.Workbook, rows: PayrollTeacherRow[])
       // modifié de ce qui a été envoyé tel quel.
       modifie: r.hasChanges === true ? "Oui" : r.hasChanges === false ? "Non" : "—",
       tardif: r.tardifCount || "",
+      // Cours AJB : ne concerne que les profs marqué·es Teacher.ajbTeacher —
+      // vide pour les autres (rien à y déclarer). "Non rempli" plutôt que 0
+      // pour bien distinguer "n'a pas encore rempli" de "a rempli 0" —
+      // demande de Rene du 18.09.2026.
+      ajbTotal: r.isAjbTeacher
+        ? r.ajbCourseCount !== null || r.ajbLateEntries.length > 0
+          ? (r.ajbCourseCount ?? 0) + r.ajbLateEntries.length
+          : "Non rempli"
+        : "",
+      ajbRempli: r.isAjbTeacher ? (r.ajbCourseCount !== null ? "Oui" : "Non") : "",
       statut: r.declarationStatus ? STATUS_LABELS[r.declarationStatus] ?? r.declarationStatus : "Aucune déclaration",
     });
   }
@@ -243,6 +255,36 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
     }
   }
 
+  // --- Cours AJB (saisis à la main, ne figurent pas dans le calendrier ci-dessus) ---
+  if (r.isAjbTeacher) {
+    sheet.addRow([]);
+    const ajbSectionRow = sheet.addRow([
+      `Cours AJB — ${r.ajbCourseCount !== null ? `${r.ajbCourseCount} déclaré(s) avant la date limite` : "champ non rempli (0 pris en compte)"}`,
+    ]);
+    sheet.mergeCells(ajbSectionRow.number, 1, ajbSectionRow.number, 10);
+    ajbSectionRow.font = { bold: true };
+    if (r.ajbLateEntries.length === 0) {
+      const note = sheet.addRow(["Aucune entrée tardive AJB ce mois-ci."]);
+      sheet.mergeCells(note.number, 1, note.number, 10);
+      note.font = { italic: true, color: { argb: "FF555555" } };
+    } else {
+      for (const e of r.ajbLateEntries) {
+        sheet.addRow([
+          e.date ?? "",
+          e.heure ?? "",
+          e.nomCours,
+          "",
+          "Cours AJB tardif",
+          1,
+          "",
+          "Oui",
+          "",
+          e.comment ?? "",
+        ]);
+      }
+    }
+  }
+
   // --- Cours sans jour fixe (packs) : non inclus dans le calendrier, à vérifier manuellement ---
   if (r.coursesSansJourFixe > 0) {
     sheet.addRow([]);
@@ -259,6 +301,10 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
   totalPrevuRow.font = { bold: true };
   const totalAjustRow = sheet.addRow(["Ajustements déclarés", "", "", "", "", r.totalAjustementsCours]);
   totalAjustRow.font = { bold: true };
+  if (r.isAjbTeacher) {
+    const totalAjbRow = sheet.addRow(["Cours AJB (mois)", "", "", "", "", (r.ajbCourseCount ?? 0) + r.ajbLateEntries.length]);
+    totalAjbRow.font = { bold: true };
+  }
   const totalRow = sheet.addRow(["Total cours du mois", "", "", "", "", r.totalFinal]);
   totalRow.font = { bold: true, size: 12 };
 }

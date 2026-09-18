@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireTeacher } from "@/lib/auth";
 import { currentPeriod, isPastDeadline } from "@/lib/dates";
-import { getDeclarationBundle, getOrCreateDeclaration } from "@/lib/declarationBundle";
+import { getDeclarationBundle, getOrCreateDeclaration, DECLARATION_INCLUDE } from "@/lib/declarationBundle";
 import { DeclarationStatus } from "@prisma/client";
 
 export async function GET() {
@@ -22,10 +22,23 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "La deadline est dépassée, la déclaration est verrouillée." }, { status: 403 });
   }
 
-  const { hasChanges } = await req.json();
+  const body = await req.json();
+  const { hasChanges, ajbCourseCount } = body;
   const declaration = await getOrCreateDeclaration(teacher.id, period);
 
-  const data: { hasChanges: boolean; status?: DeclarationStatus; submittedAt?: null } = { hasChanges };
+  const data: {
+    hasChanges?: boolean;
+    status?: DeclarationStatus;
+    submittedAt?: null;
+    ajbCourseCount?: number | null;
+  } = {};
+  if (hasChanges !== undefined) data.hasChanges = hasChanges;
+  if (ajbCourseCount !== undefined) {
+    if (ajbCourseCount !== null && (typeof ajbCourseCount !== "number" || ajbCourseCount < 0 || !Number.isInteger(ajbCourseCount))) {
+      return NextResponse.json({ error: "Nombre de cours AJB invalide." }, { status: 400 });
+    }
+    data.ajbCourseCount = ajbCourseCount;
+  }
   if (declaration.status === DeclarationStatus.SUBMITTED_MANUAL) {
     // toute modification après soumission manuelle "rouvre" la déclaration
     data.status = DeclarationStatus.DRAFT;
@@ -38,7 +51,7 @@ export async function PATCH(req: NextRequest) {
   const updated = await prisma.monthlyDeclaration.update({
     where: { id: declaration.id },
     data,
-    include: { items: { include: { course: true, otherTeacher: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } } },
+    include: DECLARATION_INCLUDE,
   });
 
   return NextResponse.json({ declaration: updated });

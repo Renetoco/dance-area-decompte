@@ -11,6 +11,7 @@ export default function CourseEditForm({
   initialJour,
   initialHeureDebut,
   initialHeureFin,
+  initialIsAJB,
   canEdit,
 }: {
   courseId: string;
@@ -18,6 +19,7 @@ export default function CourseEditForm({
   initialJour: string | null;
   initialHeureDebut: string | null;
   initialHeureFin: string | null;
+  initialIsAJB: boolean;
   canEdit: boolean;
 }) {
   const router = useRouter();
@@ -26,6 +28,7 @@ export default function CourseEditForm({
   const [jour, setJour] = useState(initialJour ?? "");
   const [heureDebut, setHeureDebut] = useState(initialHeureDebut ?? "");
   const [heureFin, setHeureFin] = useState(initialHeureFin ?? "");
+  const [isAJB, setIsAJB] = useState(initialIsAJB);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +46,7 @@ export default function CourseEditForm({
           jour: jour || null,
           heureDebut: heureDebut || null,
           heureFin: heureFin || null,
+          isAJB,
         }),
       });
       const data = await res.json();
@@ -62,6 +66,7 @@ export default function CourseEditForm({
     setJour(initialJour ?? "");
     setHeureDebut(initialHeureDebut ?? "");
     setHeureFin(initialHeureFin ?? "");
+    setIsAJB(initialIsAJB);
     setError(null);
     setEditing(false);
   }
@@ -101,6 +106,12 @@ export default function CourseEditForm({
           <input type="time" value={heureFin} onChange={(e) => setHeureFin(e.target.value)} />
         </div>
       </div>
+
+      <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+        <input type="checkbox" checked={isAJB} onChange={(e) => setIsAJB(e.target.checked)} />
+        Cours AJB (Area Jeune Ballet) — sorti du calcul automatique, compté via le champ dédié dans le décompte
+        du·de la titulaire
+      </label>
 
       <div className="btn-row" style={{ marginTop: 12 }}>
         <button className="btn secondary" onClick={cancel} disabled={busy}>

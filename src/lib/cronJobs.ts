@@ -19,8 +19,9 @@ import {
   DEADLINE_HOUR,
   PERIOD_START_DAY,
 } from "./dates";
-import { sendReminderEmail, sendAutoSubmitNotice } from "./email";
-import { DeclarationStatus } from "@prisma/client";
+import { sendReminderEmail, sendAutoSubmitNotice, sendClosureSummaryEmail } from "./email";
+import { generateXlsxForPeriod } from "./xlsxExport";
+import { DeclarationStatus, AdminRole } from "@prisma/client";
 
 async function alreadyRan(jobKey: string): Promise<boolean> {
   const existing = await prisma.cronRun.findUnique({ where: { jobDate: jobKey } });
@@ -106,6 +107,7 @@ async function sendDueReminders(period: string, dateStr: string, offset: number)
         teacherName: teacher.name,
         period,
         daysLeft: offset,
+        isAjbTeacher: teacher.ajbTeacher,
       });
       await prisma.reminderLog.create({
         data: { period, teacherId: teacher.id, type: reminderType! },
@@ -166,7 +168,70 @@ async function lockAndAutoSubmit(period: string, dateStr: string) {
   }
 
   await markRan(jobKey, `${autoSubmitted} déclaration(s) verrouillée(s) et soumise(s) automatiquement pour ${period}.`);
+  await sendClosureSummary(period);
   return { ran: true, autoSubmitted };
+}
+
+/**
+ * Mail de clôture à Admin + Comptabilité + Direction, juste après le
+ * verrouillage/l'auto-soumission ci-dessus — demande de Rene du
+ * 18.09.2026. Volontairement dans une fonction à part (plutôt qu'un
+ * échec bloquant `lockAndAutoSubmit`) : un souci d'envoi ne doit jamais
+ * empêcher la clôture elle-même de s'être bien passée.
+ */
+async function sendClosureSummary(period: string) {
+  try {
+    const [declarations, ajbTeachers, recipients] = await Promise.all([
+      prisma.monthlyDeclaration.findMany({
+        where: { period },
+        include: { items: { select: { id: true } }, teacher: { select: { name: true } } },
+      }),
+      prisma.teacher.findMany({
+        where: { active: true, ajbTeacher: true },
+        select: {
+          name: true,
+          declarations: { where: { period }, select: { ajbCourseCount: true } },
+        },
+      }),
+      prisma.adminUser.findMany({
+        where: { active: true, role: { in: [AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION] } },
+        select: { email: true },
+      }),
+    ]);
+
+    const autoSubmittedCount = declarations.filter((d) => d.status === DeclarationStatus.SUBMITTED_AUTO).length;
+    const manualSubmittedCount = declarations.filter((d) => d.status === DeclarationStatus.SUBMITTED_MANUAL).length;
+    const teachersWithChanges = declarations.filter((d) => d.hasChanges === true && d.items.length > 0);
+
+    const ajbFilledNames = ajbTeachers
+      .filter((t) => (t.declarations[0]?.ajbCourseCount ?? null) !== null)
+      .map((t) => t.name);
+    const ajbMissingNames = ajbTeachers
+      .filter((t) => (t.declarations[0]?.ajbCourseCount ?? null) === null)
+      .map((t) => t.name);
+
+    const to = recipients.map((r) => r.email).filter(Boolean);
+    if (to.length === 0) return;
+
+    const xlsxBuffer = Buffer.from(await generateXlsxForPeriod(period));
+
+    await sendClosureSummaryEmail({
+      to,
+      period,
+      xlsxBuffer,
+      stats: {
+        totalDeclarations: declarations.length,
+        autoSubmittedCount,
+        manualSubmittedCount,
+        teachersWithChangesCount: teachersWithChanges.length,
+        teachersWithChangesNames: teachersWithChanges.map((d) => d.teacher.name),
+        ajbFilledNames,
+        ajbMissingNames,
+      },
+    });
+  } catch (e) {
+    console.error("Échec d'envoi du mail de clôture :", e);
+  }
 }
 
 export async function runDailyCronTick(now: Date = new Date()) {

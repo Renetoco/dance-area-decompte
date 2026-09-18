@@ -17,6 +17,7 @@ export async function GET() {
       active: true,
       mustResetPwd: true,
       role: true,
+      ajbTeacher: true,
       _count: { select: { courses: true } },
     },
   });

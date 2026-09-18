@@ -61,6 +61,13 @@ export type PayrollOccurrence = {
   adjustment: PayrollAdjustment | null;
 };
 
+export type AjbLateEntryRow = {
+  date: string | null;
+  heure: string | null;
+  nomCours: string;
+  comment: string | null;
+};
+
 export type PayrollTeacherRow = {
   teacherId: string;
   teacherName: string;
@@ -71,11 +78,18 @@ export type PayrollTeacherRow = {
   coursesPrevus: number; // = occurrences.length (base du total)
   extraAdjustments: PayrollAdjustment[]; // changements non rattachés à une séance du planning propre du prof
   totalAjustementsCours: number; // somme de tous les deltas (occurrences + extra)
-  totalFinal: number; // coursesPrevus + totalAjustementsCours
+  totalFinal: number; // coursesPrevus + totalAjustementsCours + total AJB
   aVerifierCount: number; // nombre de lignes à vérifier (occurrences + extra)
   tardifCount: number; // nombre de lignes saisies après la deadline (occurrences + extra)
   declarationStatus: DeclarationStatus | null; // null = aucune déclaration pour cette période
   hasChanges: boolean | null;
+  // Cours AJB : ne sont plus comptés automatiquement (trop de changements),
+  // voir Course.isAJB — saisis à la main par les profs concerné·es
+  // (Teacher.ajbTeacher). null = champ pas encore rempli (0 pris en
+  // compte) ; distinct de 0 (rempli, aucun cours donné ce mois-ci).
+  isAjbTeacher: boolean;
+  ajbCourseCount: number | null;
+  ajbLateEntries: AjbLateEntryRow[]; // entrées tardives AJB (20-26), chacune compte pour +1 dans le total
 };
 
 export async function computePayrollForPeriod(period: string, teacherIds?: string[]): Promise<PayrollTeacherRow[]> {
@@ -97,6 +111,7 @@ export async function computePayrollForPeriod(period: string, teacherIds?: strin
             },
             orderBy: { createdAt: "asc" },
           },
+          ajbLateEntries: { orderBy: { createdAt: "asc" } },
         },
       },
     },
@@ -105,8 +120,13 @@ export async function computePayrollForPeriod(period: string, teacherIds?: strin
 
   return teachers.map((t) => {
     type BaseCourse = { id: string; code: string; nomCours: string; jour: string | null };
+    // Les cours AJB (Course.isAJB) sortent du calendrier prévisionnel du·de
+    // la titulaire (trop de changements pour être comptés automatiquement,
+    // voir Teacher.ajbTeacher et MonthlyDeclaration.ajbCourseCount) — mais
+    // pas des participations en tant que musicien·ne/co-prof, qui
+    // continuent de fonctionner normalement.
     const baseCourses: BaseCourse[] = [
-      ...t.courses,
+      ...t.courses.filter((c) => !c.isAJB),
       ...t.courseParticipations.filter((cp) => cp.course.active).map((cp) => cp.course),
     ];
 
@@ -177,6 +197,17 @@ export async function computePayrollForPeriod(period: string, teacherIds?: strin
 
     const coursesPrevus = occurrences.length;
 
+    const ajbLateEntries: AjbLateEntryRow[] = (decl?.ajbLateEntries ?? []).map((e) => ({
+      date: e.date ? e.date.toISOString().slice(0, 10) : null,
+      heure: e.heure,
+      nomCours: e.nomCours,
+      comment: e.comment,
+    }));
+    // Chaque entrée tardive AJB compte pour +1, comme les autres lignes
+    // tardives (voir DeclarationItem.tardif) — à la comptabilité de décider
+    // ensuite, via l'export, si elle est prise en compte ce mois-ci ou reportée.
+    const ajbTotal = (decl?.ajbCourseCount ?? 0) + ajbLateEntries.length;
+
     return {
       teacherId: t.id,
       teacherName: t.name,
@@ -187,11 +218,14 @@ export async function computePayrollForPeriod(period: string, teacherIds?: strin
       coursesPrevus,
       extraAdjustments,
       totalAjustementsCours,
-      totalFinal: coursesPrevus + totalAjustementsCours,
+      totalFinal: coursesPrevus + totalAjustementsCours + ajbTotal,
       aVerifierCount,
       tardifCount,
       declarationStatus: decl?.status ?? null,
       hasChanges: decl?.hasChanges ?? null,
+      isAjbTeacher: t.ajbTeacher,
+      ajbCourseCount: decl?.ajbCourseCount ?? null,
+      ajbLateEntries,
     };
   });
 }

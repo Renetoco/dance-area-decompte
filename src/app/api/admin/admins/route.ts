@@ -10,7 +10,7 @@ export async function GET() {
 
   const admins = await prisma.adminUser.findMany({
     orderBy: { name: "asc" },
-    select: { id: true, name: true, email: true, role: true, active: true },
+    select: { id: true, name: true, email: true, role: true, active: true, canManageCourses: true },
   });
   return NextResponse.json({
     admins: admins.map((a) => ({ ...a, protected: isProtectedAdminEmail(a.email) })),

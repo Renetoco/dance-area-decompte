@@ -9,6 +9,7 @@ type AdminAccount = {
   role: "ADMIN" | "COMPTABILITE" | "DIRECTION";
   active: boolean;
   protected: boolean;
+  canManageCourses: boolean;
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -116,6 +117,26 @@ export default function AdminAccounts() {
     }
   }
 
+  async function toggleCanManageCourses(a: AdminAccount) {
+    setBusyId(a.id);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/admins/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ canManageCourses: !a.canManageCourses }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Échec de la mise à jour.");
+        return;
+      }
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function supprimerCompte(a: AdminAccount) {
     if (confirmDeleteId !== a.id) {
       // Étape de sécurité : un premier clic demande confirmation, le
@@ -154,6 +175,7 @@ export default function AdminAccounts() {
               <th>Nom</th>
               <th>Email</th>
               <th>Rôle</th>
+              <th title="Ajouter, désactiver/réactiver et supprimer des cours">Gérer les cours</th>
               <th>Statut</th>
               <th>Actions</th>
             </tr>
@@ -185,6 +207,20 @@ export default function AdminAccounts() {
                     </div>
                   </td>
                   <td>{ROLE_LABELS[a.role]}</td>
+                  <td>
+                    {a.role === "ADMIN" ? (
+                      <span className="muted" style={{ fontSize: "0.8rem" }}>
+                        Déjà inclus (administrateur)
+                      </span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        checked={a.canManageCourses}
+                        disabled={busyId === a.id}
+                        onChange={() => toggleCanManageCourses(a)}
+                      />
+                    )}
+                  </td>
                   <td>
                     {a.protected ? (
                       <span className="badge info">Compte protégé</span>

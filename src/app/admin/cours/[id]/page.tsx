@@ -71,6 +71,8 @@ export default async function FicheCoursPage({ params }: { params: { id: string 
                 {course.jour} {course.heureDebut ? `${course.heureDebut} – ${course.heureFin ?? ""}` : ""}
               </span>
             )}
+            {course.isAJB && <span className="badge info">AJB</span>}
+            {!course.active && <span className="badge neutral">Désactivé</span>}
           </div>
           <CourseEditForm
             courseId={course.id}
@@ -78,6 +80,7 @@ export default async function FicheCoursPage({ params }: { params: { id: string 
             initialJour={course.jour}
             initialHeureDebut={course.heureDebut}
             initialHeureFin={course.heureFin}
+            initialIsAJB={course.isAJB}
             canEdit={canEditCourseFields}
           />
         </div>

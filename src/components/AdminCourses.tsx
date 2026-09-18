@@ -11,6 +11,8 @@ type CourseRow = {
   jour: string | null;
   heureDebut: string | null;
   heureFin: string | null;
+  isAJB: boolean;
+  active: boolean;
   teacher: { id: string; name: string } | null;
   _count: { participants: number };
 };
@@ -27,12 +29,14 @@ const emptyForm = {
   heureDebut: "",
   heureFin: "",
   teacherId: "",
+  isAJB: false,
 };
 
-export default function AdminCourses() {
+export default function AdminCourses({ canManageCourses }: { canManageCourses: boolean }) {
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [teachers, setTeachers] = useState<TeacherLite[]>([]);
   const [q, setQ] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -45,6 +49,7 @@ export default function AdminCourses() {
     setLoading(true);
     const params = new URLSearchParams();
     if (q) params.set("q", q);
+    if (showInactive && canManageCourses) params.set("includeInactive", "1");
     return fetch(`/api/admin/courses?${params}`)
       .then((r) => r.json())
       .then((d) => setCourses(d.courses ?? []))
@@ -60,7 +65,7 @@ export default function AdminCourses() {
   useEffect(() => {
     const t = setTimeout(loadCourses, 200);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, showInactive]);
 
   async function ajouterCours(e: React.FormEvent) {
     e.preventDefault();
@@ -78,6 +83,7 @@ export default function AdminCourses() {
           heureDebut: form.heureDebut || null,
           heureFin: form.heureFin || null,
           teacherId: form.teacherId || null,
+          isAJB: form.isAJB,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -107,7 +113,11 @@ export default function AdminCourses() {
       const res = await fetch(`/api/admin/courses/${c.id}`, { method: "DELETE" });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setMessage(data?.error || "Échec de la suppression.");
+        setMessage(
+          data?.error
+            ? `${data.error} Vous pouvez le désactiver à la place (bouton « Désactiver » ci-contre) : il disparaît des listes mais son historique est conservé.`
+            : "Échec de la suppression."
+        );
         return;
       }
       setMessage(`Le cours « ${c.nomCours} » a été supprimé.`);
@@ -115,6 +125,27 @@ export default function AdminCourses() {
     } finally {
       setBusyId(null);
       setConfirmDeleteId(null);
+    }
+  }
+
+  async function toggleActive(c: CourseRow) {
+    setBusyId(c.id);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/courses/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !c.active }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Échec de la mise à jour du statut.");
+        return;
+      }
+      setMessage(c.active ? `Le cours « ${c.nomCours} » a été désactivé.` : `Le cours « ${c.nomCours} » a été réactivé.`);
+      await loadCourses();
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -126,6 +157,12 @@ export default function AdminCourses() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        {canManageCourses && (
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
+            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+            Afficher aussi les cours désactivés
+          </label>
+        )}
       </div>
 
       {loading && <p className="muted">Chargement...</p>}
@@ -140,14 +177,16 @@ export default function AdminCourses() {
               <th>Catégorie</th>
               <th>Jour</th>
               <th>Horaire</th>
+              <th>AJB</th>
               <th>Titulaire</th>
               <th>Participant·es</th>
-              <th>Actions</th>
+              {canManageCourses && <th>Statut</th>}
+              {canManageCourses && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {courses.map((c) => (
-              <tr key={c.id} className="is-clickable">
+              <tr key={c.id} className={c.active ? "is-clickable" : "is-clickable muted"}>
                 <td className="muted">{c.code}</td>
                 <td>
                   <Link href={`/admin/cours/${c.id}`}>{c.nomCours}</Link>
@@ -155,26 +194,43 @@ export default function AdminCourses() {
                 <td>{c.categorie}</td>
                 <td>{c.jour ?? "—"}</td>
                 <td>{c.heureDebut ? `${c.heureDebut} – ${c.heureFin ?? ""}` : "—"}</td>
+                <td>{c.isAJB && <span className="badge info">AJB</span>}</td>
                 <td>
                   {c.teacher ? <Link href={`/admin/profs/${c.teacher.id}`}>{c.teacher.name}</Link> : "—"}
                 </td>
                 <td>{c._count.participants > 0 ? `${c._count.participants}` : "—"}</td>
-                <td>
-                  <div className="btn-row">
-                    <button
-                      className="btn danger small"
-                      disabled={busyId === c.id}
-                      onClick={() => supprimerCours(c)}
-                    >
-                      {confirmDeleteId === c.id ? "Confirmer ?" : "Supprimer"}
-                    </button>
-                    {confirmDeleteId === c.id && (
-                      <button className="btn secondary small" onClick={() => setConfirmDeleteId(null)}>
-                        Annuler
+                {canManageCourses && (
+                  <td>
+                    <span className={`badge ${c.active ? "success" : "neutral"}`}>
+                      {c.active ? "Actif" : "Désactivé"}
+                    </span>
+                  </td>
+                )}
+                {canManageCourses && (
+                  <td>
+                    <div className="btn-row">
+                      <button className="btn secondary small" disabled={busyId === c.id} onClick={() => toggleActive(c)}>
+                        {c.active ? "Désactiver" : "Réactiver"}
                       </button>
-                    )}
-                  </div>
-                </td>
+                      {c.active && (
+                        <>
+                          <button
+                            className="btn danger small"
+                            disabled={busyId === c.id}
+                            onClick={() => supprimerCours(c)}
+                          >
+                            {confirmDeleteId === c.id ? "Confirmer ?" : "Supprimer"}
+                          </button>
+                          {confirmDeleteId === c.id && (
+                            <button className="btn secondary small" onClick={() => setConfirmDeleteId(null)}>
+                              Annuler
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -183,7 +239,7 @@ export default function AdminCourses() {
       {!loading && courses.length === 0 && <p className="muted">Aucun cours ne correspond à cette recherche.</p>}
 
       <div style={{ marginTop: 20 }}>
-        {!showAddForm ? (
+        {!canManageCourses ? null : !showAddForm ? (
           <button className="btn secondary" onClick={() => setShowAddForm(true)}>
             + Ajouter un cours
           </button>
@@ -243,6 +299,14 @@ export default function AdminCourses() {
                 </option>
               ))}
             </select>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: "0.85rem" }}>
+              <input
+                type="checkbox"
+                checked={form.isAJB}
+                onChange={(e) => setForm({ ...form, isAJB: e.target.checked })}
+              />
+              Cours AJB (Area Jeune Ballet) — ne sera pas compté automatiquement
+            </label>
             <div className="btn-row" style={{ marginTop: 10 }}>
               <button type="button" className="btn secondary" onClick={() => setShowAddForm(false)}>
                 Annuler

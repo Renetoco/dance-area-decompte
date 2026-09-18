@@ -15,10 +15,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const target = await prisma.adminUser.findUnique({ where: { id: params.id } });
   if (!target) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
 
-  const { name, email, role, active } = await req.json();
-  const data: { name?: string; email?: string; role?: AdminRole; active?: boolean } = {};
+  const { name, email, role, active, canManageCourses } = await req.json();
+  const data: {
+    name?: string;
+    email?: string;
+    role?: AdminRole;
+    active?: boolean;
+    canManageCourses?: boolean;
+  } = {};
 
   if (typeof name === "string" && name.trim()) data.name = name.trim();
+  // Réglage individuel "gérer les cours" (ajout/désactivation/suppression),
+  // indépendant du rôle — demande de Rene du 18.09.2026, voir
+  // src/lib/auth.ts#canManageCourses.
+  if (typeof canManageCourses === "boolean") data.canManageCourses = canManageCourses;
   if (typeof active === "boolean") {
     if (active === false && isProtectedAdminEmail(target.email)) {
       return NextResponse.json(
@@ -41,7 +51,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const updated = await prisma.adminUser.update({
     where: { id: params.id },
     data,
-    select: { id: true, name: true, email: true, role: true, active: true },
+    select: { id: true, name: true, email: true, role: true, active: true, canManageCourses: true },
   });
 
   return NextResponse.json({ admin: updated });

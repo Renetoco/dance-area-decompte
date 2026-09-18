@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, canManageCourses } from "@/lib/auth";
 import { AdminRole } from "@prisma/client";
 import AdminCourses from "@/components/AdminCourses";
 
@@ -14,7 +14,7 @@ export default async function CoursListPage() {
         Cliquez sur un cours pour voir sa fiche : titulaire, musicien·nes ou co-profs rattaché·es, et l'historique
         des changements déclarés sur ce cours.
       </p>
-      <AdminCourses />
+      <AdminCourses canManageCourses={canManageCourses(admin)} />
     </div>
   );
 }

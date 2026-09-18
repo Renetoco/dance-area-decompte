@@ -48,17 +48,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const teacher = await prisma.teacher.findUnique({ where: { id: params.id } });
   if (!teacher) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
 
-  const { email, active, role, tempPassword: customTempPassword } = await req.json();
+  const { email, active, role, ajbTeacher, tempPassword: customTempPassword } = await req.json();
   const data: {
     email?: string;
     active?: boolean;
     passwordHash?: string;
     mustResetPwd?: boolean;
     role?: TeacherRole;
+    ajbTeacher?: boolean;
   } = {};
 
   if (typeof active === "boolean") data.active = active;
   if (role && role in TeacherRole) data.role = role as TeacherRole;
+  // Donne des cours AJB (Area Jeune Ballet) — coché à la main (demande de
+  // Rene du 18.09.2026), fait apparaître le champ "cours AJB" et l'option
+  // d'entrée tardive AJB dans le décompte de ce prof.
+  if (typeof ajbTeacher === "boolean") data.ajbTeacher = ajbTeacher;
 
   let tempPassword: string | undefined;
   if (email) {
@@ -80,7 +85,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const updated = await prisma.teacher.update({
     where: { id: params.id },
     data,
-    select: { id: true, analyticCode: true, name: true, email: true, active: true, mustResetPwd: true, role: true },
+    select: {
+      id: true,
+      analyticCode: true,
+      name: true,
+      email: true,
+      active: true,
+      mustResetPwd: true,
+      role: true,
+      ajbTeacher: true,
+    },
   });
 
   let emailSent: boolean | undefined;
