@@ -19,7 +19,10 @@ export default async function FicheProfPage({ params }: { params: { id: string }
   const teacher = await prisma.teacher.findUnique({
     where: { id: params.id },
     include: {
-      courses: { where: { active: true }, orderBy: [{ jour: "asc" }, { heureDebut: "asc" }] },
+      // Pas de filtre sur active : la fiche doit montrer tous les cours
+      // rattachés à ce prof, y compris désactivés (demande de Rene du
+      // 21.09.2026) — chaque ligne affiche son statut (voir TeacherCourseManager).
+      courses: { orderBy: [{ jour: "asc" }, { heureDebut: "asc" }] },
       courseParticipations: {
         include: { course: true },
         orderBy: { createdAt: "asc" },
@@ -81,6 +84,7 @@ export default async function FicheProfPage({ params }: { params: { id: string }
           jour: c.jour,
           heureDebut: c.heureDebut,
           heureFin: c.heureFin,
+          active: c.active,
         }))}
         availableCourses={allActiveCourses}
         canEdit={canEdit}
@@ -99,6 +103,7 @@ export default async function FicheProfPage({ params }: { params: { id: string }
             jour: p.course.jour,
             heureDebut: p.course.heureDebut,
             heureFin: p.course.heureFin,
+            active: p.course.active,
           },
         }))}
         availableCourses={allActiveCourses.map((c) => ({
@@ -109,6 +114,8 @@ export default async function FicheProfPage({ params }: { params: { id: string }
           heureDebut: c.heureDebut,
           heureFin: c.heureFin,
           teacher: c.teacher,
+          // allActiveCourses ne contient que des cours actifs par construction.
+          active: true,
         }))}
         canEdit={canEdit}
       />

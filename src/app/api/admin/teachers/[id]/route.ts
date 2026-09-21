@@ -19,8 +19,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const teacher = await prisma.teacher.findUnique({
     where: { id: params.id },
     include: {
+      // Pas de filtre sur active : la fiche doit montrer tous les cours
+      // rattachés, y compris désactivés (demande de Rene du 21.09.2026).
       courses: {
-        where: { active: true },
         orderBy: [{ jour: "asc" }, { heureDebut: "asc" }],
       },
       courseParticipations: {
@@ -160,10 +161,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 // Supprime définitivement un prof — réservé aux profs qui n'ont encore
-// aucune trace dans le système (créés par erreur, doublon, etc.). Dès qu'il
-// y a le moindre historique (cours, déclaration, intervention comme
-// musicien·ne, citation dans la déclaration d'un·e collègue), la suppression
-// est refusée pour ne jamais perdre de données : on désactive à la place.
+// aucune trace "de fond" dans le système (créés par erreur, doublon, etc.).
+// Dès qu'il y a le moindre historique métier (cours, déclaration,
+// intervention comme musicien·ne, citation dans la déclaration d'un·e
+// collègue), la suppression est refusée pour ne jamais perdre de données :
+// on désactive à la place. Les emails de rappel (ReminderLog) ne bloquent
+// PLUS la suppression : ce n'est qu'une trace technique d'envoi, sans valeur
+// une fois le prof supprimé — ils sont simplement effacés avec lui/elle
+// (ajustement du 21.09.2026, suite à un cas bloqué uniquement par 1 email de
+// rappel alors que le prof n'avait plus aucun cours ni déclaration).
 // Réservé à qui peut gérer les cours (demande de Rene du 18.09.2026, voir
 // canManageCourses ; auparavant réservé au seul compte ADMIN).
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -191,7 +197,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   if (!teacher) return NextResponse.json({ error: "Introuvable." }, { status: 404 });
 
   const { courses, declarations, courseParticipations, reminderLogs, citedInItems } = teacher._count;
-  if (courses + declarations + courseParticipations + reminderLogs + citedInItems > 0) {
+  if (courses + declarations + courseParticipations + citedInItems > 0) {
     // Détaille ce qui bloque plutôt qu'un message générique — un prof peut
     // avoir 0 cours en tant que titulaire (colonne "Cours" du tableau) tout
     // en étant rattaché comme musicien·ne/co-enseignant·e à un ou plusieurs
@@ -201,7 +207,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     if (courses > 0) raisons.push(`${courses} cours en tant que titulaire`);
     if (courseParticipations > 0) raisons.push(`${courseParticipations} intervention(s) comme musicien·ne/co-enseignant·e`);
     if (declarations > 0) raisons.push(`${declarations} déclaration(s)`);
-    if (reminderLogs > 0) raisons.push(`${reminderLogs} email(s) de rappel envoyé(s)`);
     if (citedInItems > 0) raisons.push(`cité·e dans ${citedInItems} déclaration(s) d'un·e collègue`);
 
     return NextResponse.json(
@@ -212,13 +217,21 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     );
   }
 
-  await prisma.teacher.delete({ where: { id: params.id } });
+  // Les éventuels emails de rappel ne bloquent plus la suppression : on les
+  // efface avec le prof, dans la même transaction, pour ne pas laisser de
+  // lignes orphelines (contrainte de clé étrangère sur ReminderLog.teacherId).
+  await prisma.$transaction([
+    prisma.reminderLog.deleteMany({ where: { teacherId: params.id } }),
+    prisma.teacher.delete({ where: { id: params.id } }),
+  ]);
 
   await logAdminAction(admin, {
     action: "teacher.deleted",
     entityType: "Teacher",
     entityId: teacher.id,
-    description: `Prof supprimé·e : ${teacher.name}`,
+    description: `Prof supprimé·e : ${teacher.name}${
+      reminderLogs > 0 ? ` (dont ${reminderLogs} email(s) de rappel associé(s), également supprimé(s))` : ""
+    }`,
   });
 
   return NextResponse.json({ ok: true });

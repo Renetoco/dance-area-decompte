@@ -9,7 +9,15 @@ type ParticipantRole = "MUSICIEN" | "CO_ENSEIGNANT";
 type ParticipationRow = {
   id: string;
   role: ParticipantRole;
-  course: { id: string; code: string; nomCours: string; jour: string | null; heureDebut: string | null; heureFin: string | null };
+  course: {
+    id: string;
+    code: string;
+    nomCours: string;
+    jour: string | null;
+    heureDebut: string | null;
+    heureFin: string | null;
+    active: boolean;
+  };
 };
 
 type CourseOption = {
@@ -20,6 +28,7 @@ type CourseOption = {
   heureDebut: string | null;
   heureFin: string | null;
   teacher: { id: string; name: string } | null;
+  active: boolean;
 };
 
 const ROLE_LABELS: Record<ParticipantRole, string> = {
@@ -110,6 +119,7 @@ export default function TeacherParticipationManager({
                 <th>Rôle</th>
                 <th>Jour</th>
                 <th>Horaire</th>
+                <th>Statut</th>
                 {canEdit && <th></th>}
               </tr>
             </thead>
@@ -125,6 +135,11 @@ export default function TeacherParticipationManager({
                   </td>
                   <td>{p.course.jour ?? "—"}</td>
                   <td>{p.course.heureDebut ? `${p.course.heureDebut} – ${p.course.heureFin ?? ""}` : "—"}</td>
+                  <td>
+                    <span className={`badge ${p.course.active ? "success" : "neutral"}`}>
+                      {p.course.active ? "Actif" : "Désactivé"}
+                    </span>
+                  </td>
                   {canEdit && (
                     <td>
                       <button className="btn danger small" disabled={busy} onClick={() => removeParticipation(p)}>

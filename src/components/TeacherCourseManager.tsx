@@ -11,6 +11,7 @@ type CourseRow = {
   jour: string | null;
   heureDebut: string | null;
   heureFin: string | null;
+  active: boolean;
 };
 
 type CourseOption = {
@@ -114,6 +115,7 @@ export default function TeacherCourseManager({
                 <th>Cours</th>
                 <th>Jour</th>
                 <th>Horaire</th>
+                <th>Statut</th>
                 {canEdit && <th></th>}
               </tr>
             </thead>
@@ -126,6 +128,11 @@ export default function TeacherCourseManager({
                   </td>
                   <td>{c.jour ?? "—"}</td>
                   <td>{c.heureDebut ? `${c.heureDebut} – ${c.heureFin ?? ""}` : "—"}</td>
+                  <td>
+                    <span className={`badge ${c.active ? "success" : "neutral"}`}>
+                      {c.active ? "Actif" : "Désactivé"}
+                    </span>
+                  </td>
                   {canEdit && (
                     <td>
                       <button className="btn danger small" disabled={busy} onClick={() => removeCourse(c)}>
