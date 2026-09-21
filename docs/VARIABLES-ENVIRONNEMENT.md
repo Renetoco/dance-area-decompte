@@ -15,14 +15,21 @@ factices) est versionné.
 | `APP_URL` | URL publique de l'app (utilisée dans les liens des emails et le QR code) | L'URL de production Vercel, ex. `https://dance-area-decompte.vercel.app` |
 | `SMTP_HOST` | Serveur SMTP | `mail.infomaniak.com` |
 | `SMTP_PORT` | Port SMTP | `587` |
-| `SMTP_USER` | Adresse d'envoi des emails | `rene.torres@dancearea.ch` |
+| `SMTP_USER` | Adresse d'envoi des emails — boîte dédiée, distincte des comptes admin (voir point d'attention ci-dessous) | `no-reply@dancearea.ch` |
 | `SMTP_PASSWORD` | Mot de passe de cette boîte mail (ou mot de passe d'application) | Panneau Infomaniak de la boîte mail |
-| `MAIL_FROM` | Nom + adresse affichés comme expéditeur | ex. `Dance Area — Décomptes <rene.torres@dancearea.ch>` |
+| `MAIL_FROM` | Nom + adresse affichés comme expéditeur | ex. `Dance Area — Décomptes <no-reply@dancearea.ch>` |
 | `ADMIN_EMAIL` | Email du 1er compte admin, utilisé **uniquement** par le script de seed (`npm run seed`) s'il n'existe encore aucun admin | — |
 | `ADMIN_INITIAL_PASSWORD` | Mot de passe initial de ce même compte, à changer immédiatement après la 1ère connexion | — |
 
 ## Points d'attention
 
+- **`SMTP_USER`/`MAIL_FROM` (adresse d'envoi) est une boîte dédiée
+  (`no-reply@dancearea.ch`), distincte des comptes admin de Rene et
+  d'Anastasia** — changement du 21.09.2026, avant c'était l'adresse
+  personnelle `rene.torres@dancearea.ch` qui servait aussi à l'envoi. Ne
+  pas confondre avec `ADMIN_EMAIL` ci-dessus, ni avec
+  `PROTECTED_ADMIN_EMAILS` (`src/lib/auth.ts`), qui concernent les
+  comptes de connexion au backend, pas l'envoi des emails.
 - **Un changement de `SESSION_SECRET` déconnecte tout le monde** (tous les
   cookies de session existants deviennent invalides). C'est normal et
   volontaire si on doit un jour le faire — informer l'équipe avant.

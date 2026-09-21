@@ -43,7 +43,7 @@ testé par Rene en conditions réelles, et est en production.
 | **Vercel** | Hébergement, déploiement, variables d'environnement, logs | Compte Vercel lié au dépôt GitHub |
 | **Neon** | Base de données PostgreSQL | Compte Neon du projet |
 | **cron-job.org** | Déclenche `/api/cron/daily` au moins une fois par heure | Compte cron-job.org de Rene |
-| **Infomaniak** | Boîte mail `rene.torres@dancearea.ch` (envoi des emails de l'app) | Panneau Infomaniak |
+| **Infomaniak** | Boîte mail `no-reply@dancearea.ch` (envoi des emails de l'app) | Panneau Infomaniak |
 | Gestionnaire de mots de passe | Codes de récupération Vercel (à y déplacer — voir section 6) | — |
 
 Aucun de ces accès n'est partagé avec un tiers en dehors de Rene à ce

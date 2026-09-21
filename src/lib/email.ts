@@ -31,7 +31,7 @@ function getTransport() {
   });
 }
 
-const FROM = process.env.MAIL_FROM || "Dance Area — Décomptes <rene.torres@dancearea.ch>";
+const FROM = process.env.MAIL_FROM || "Dance Area — Décomptes <no-reply@dancearea.ch>";
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 async function send(

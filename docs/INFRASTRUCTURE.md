@@ -46,7 +46,7 @@ soumission automatique à la deadline.
 | Base de données | PostgreSQL (hébergée chez Neon) | Accès via Prisma ORM 5.20 |
 | Authentification | iron-session (cookies chiffrés) | Pas de service tiers (Auth0, Clerk, etc.) |
 | Mots de passe | bcryptjs (coût 12) | Hashés, jamais stockés en clair |
-| Emails | nodemailer + SMTP Infomaniak | Boîte `rene.torres@dancearea.ch` |
+| Emails | nodemailer + SMTP Infomaniak | Boîte dédiée `no-reply@dancearea.ch` |
 | QR code | librairie `qrcode` | Génère le QR d'accès affiché à l'école |
 | Hébergement | Vercel | Déploiement automatique à chaque push sur `main` |
 | Planificateur (cron) | cron-job.org (service externe gratuit) | Vercel Cron n'est pas utilisé (nécessiterait un plan payant pour une fréquence horaire) |

@@ -153,7 +153,7 @@ SELECT * FROM "CronRun" ORDER BY "ranAt" DESC LIMIT 20;
    d'envoi y est systématiquement journalisé (`console.error`) sans faire
    planter le reste du traitement.
 4. Vérifier aussi le dossier spam du destinataire, et que la boîte
-   `rene.torres@dancearea.ch` n'a pas atteint une limite d'envoi
+   `no-reply@dancearea.ch` n'a pas atteint une limite d'envoi
    Infomaniak.
 
 ## Rotation du `SESSION_SECRET` ou du `CRON_SECRET`
