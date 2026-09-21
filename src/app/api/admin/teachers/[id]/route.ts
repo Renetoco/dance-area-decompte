@@ -192,10 +192,21 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 
   const { courses, declarations, courseParticipations, reminderLogs, citedInItems } = teacher._count;
   if (courses + declarations + courseParticipations + reminderLogs + citedInItems > 0) {
+    // Détaille ce qui bloque plutôt qu'un message générique — un prof peut
+    // avoir 0 cours en tant que titulaire (colonne "Cours" du tableau) tout
+    // en étant rattaché comme musicien·ne/co-enseignant·e à un ou plusieurs
+    // cours (invisible dans cette colonne), ce qui suffit à bloquer la
+    // suppression (demande de Rene du 21.09.2026, confusion constatée).
+    const raisons: string[] = [];
+    if (courses > 0) raisons.push(`${courses} cours en tant que titulaire`);
+    if (courseParticipations > 0) raisons.push(`${courseParticipations} intervention(s) comme musicien·ne/co-enseignant·e`);
+    if (declarations > 0) raisons.push(`${declarations} déclaration(s)`);
+    if (reminderLogs > 0) raisons.push(`${reminderLogs} email(s) de rappel envoyé(s)`);
+    if (citedInItems > 0) raisons.push(`cité·e dans ${citedInItems} déclaration(s) d'un·e collègue`);
+
     return NextResponse.json(
       {
-        error:
-          "Impossible de supprimer : ce prof a des cours ou un historique de déclarations rattachés. Désactivez-le plutôt.",
+        error: `Impossible de supprimer : ${raisons.join(", ")}. Désactivez-le/la plutôt.`,
       },
       { status: 409 }
     );

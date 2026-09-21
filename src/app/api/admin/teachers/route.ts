@@ -19,7 +19,12 @@ export async function GET() {
       mustResetPwd: true,
       role: true,
       ajbTeacher: true,
-      _count: { select: { courses: true } },
+      // courseParticipations comptée en plus de courses (titulaire) — un
+      // prof/musicien·ne peut avoir 0 cours en tant que titulaire tout en
+      // étant rattaché·e comme musicien·ne/co-enseignant·e ailleurs, ce qui
+      // suffit à bloquer la suppression (confusion constatée le
+      // 21.09.2026, voir DELETE /api/admin/teachers/[id]).
+      _count: { select: { courses: true, courseParticipations: true } },
     },
   });
 

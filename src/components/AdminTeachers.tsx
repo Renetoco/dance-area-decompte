@@ -14,7 +14,7 @@ type Teacher = {
   mustResetPwd: boolean;
   role: TeacherRole;
   ajbTeacher: boolean;
-  _count: { courses: number };
+  _count: { courses: number; courseParticipations: number };
 };
 
 const ROLE_LABELS: Record<TeacherRole, string> = {
@@ -215,7 +215,8 @@ export default function AdminTeachers({ canManageCourses }: { canManageCourses: 
               <th>Code</th>
               <th>Nom</th>
               <th>Rôle</th>
-              <th>Cours</th>
+              <th title="Nombre de cours dont le prof est titulaire">Cours (titulaire)</th>
+              <th title="Nombre de cours où le prof intervient comme musicien·ne/co-enseignant·e, sans en être titulaire — compte aussi pour empêcher la suppression">Interv.</th>
               <th title="Donne des cours AJB (Area Jeune Ballet) — fait apparaître le champ dédié dans son décompte">AJB</th>
               <th>Email / compte</th>
               <th>Statut</th>
@@ -250,6 +251,7 @@ export default function AdminTeachers({ canManageCourses }: { canManageCourses: 
                     )}
                   </td>
                   <td>{t._count.courses}</td>
+                  <td>{t._count.courseParticipations}</td>
                   <td>
                     <input
                       type="checkbox"
