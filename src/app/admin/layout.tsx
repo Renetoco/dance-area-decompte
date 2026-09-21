@@ -9,8 +9,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!admin) redirect("/connexion");
   if (admin.mustResetPwd) redirect("/admin-mot-de-passe");
 
-  const roleLabel =
-    admin.role === "ADMIN" ? "Administrateur" : admin.role === "COMPTABILITE" ? "Comptabilité" : "Direction";
+  const ROLE_LABELS: Record<string, string> = {
+    ADMIN: "Administrateur",
+    COMPTABILITE: "Comptabilité",
+    DIRECTION: "Direction",
+    SECRETARIAT: "Secrétariat",
+  };
+  const roleLabel = ROLE_LABELS[admin.role] ?? admin.role;
 
   return (
     <div className="admin-shell">

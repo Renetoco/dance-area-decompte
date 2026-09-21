@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   const { name, email, role, tempPassword: customTempPassword } = await req.json();
   if (!name || !email || !role || !(role in AdminRole)) {
-    return NextResponse.json({ error: "Nom, email et rôle (ADMIN/COMPTABILITE/DIRECTION) requis." }, { status: 400 });
+    return NextResponse.json({ error: "Nom, email et rôle (ADMIN/COMPTABILITE/SECRETARIAT/DIRECTION) requis." }, { status: 400 });
   }
 
   const normalizedEmail = String(email).trim().toLowerCase();

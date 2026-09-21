@@ -1,6 +1,6 @@
 # Infrastructure — Décompte mensuel Dance Area
 
-Document de référence technique. Dernière mise à jour : 13 septembre 2026.
+Document de référence technique. Dernière mise à jour : 21 septembre 2026.
 
 ## 1. Vue d'ensemble
 
@@ -111,8 +111,9 @@ Hébergée chez **Neon** (PostgreSQL serverless). Le schéma est défini dans
   rattaché à un `Course` existant, puisque les remplacements AJB ne
   correspondent pas toujours à une séance planifiée. Compte pour +1 dans
   le total AJB du mois, comme les lignes `tardif` classiques.
-- **AdminUser** — comptes admin/comptabilité/direction, avec rôle
-  (`ADMIN`, `COMPTABILITE`, `DIRECTION`). `canManageCourses` (réglage
+- **AdminUser** — comptes admin/comptabilité/direction/secrétariat, avec
+  rôle (`ADMIN`, `COMPTABILITE`, `DIRECTION`, `SECRETARIAT`).
+  `canManageCourses` (réglage
   individuel, indépendant du rôle) autorise en plus à gérer les cours et
   les profs/musicien·nes (ajout, désactivation/réactivation, suppression,
   titulaire, rattachements) — voir section 5.
@@ -144,15 +145,27 @@ Deux types de comptes, avec la même mécanique de session (cookie signé,
 - **Comptes prof** (`Teacher`) : session valable 30 jours (connexion
   ponctuelle, une fois par mois).
 - **Comptes admin** (`AdminUser`) : session valable 8 heures seulement,
-  car ces comptes ont plus de privilèges. Trois rôles :
+  car ces comptes ont plus de privilèges. Quatre rôles :
   - `ADMIN` — accès complet : gestion des comptes (profs, comptabilité,
-    direction, autres admins), gestion des cours, import annuel du
-    planning, QR code, suppression de déclarations.
+    direction, secrétariat, autres admins), gestion des cours, import
+    annuel du planning, QR code, suppression de déclarations.
   - `COMPTABILITE` — tableau de bord des déclarations + export Excel.
   - `DIRECTION` — tableau de bord des déclarations + export Excel (même
     accès que `COMPTABILITE`, élargi le 16.09.2026 pour Anastasia).
+  - `SECRETARIAT` (ajouté le 21.09.2026) — mêmes droits et écrans que
+    `COMPTABILITE` en tout point (tableau de bord, export Excel, gestion
+    des cours/profs si `canManageCourses` est activé). La seule
+    différence est le volume d'emails automatiques reçus, volontairement
+    réduit — voir section 7. Un compte peut être basculé entre
+    `COMPTABILITE` et `SECRETARIAT` à tout moment depuis
+    `/admin/administration` (sélecteur sur la ligne du compte) ; ce
+    changement ne touche à rien d'autre (droits, historique, mot de
+    passe). `ADMIN` et `DIRECTION` ne sont volontairement pas
+    basculables : la route `PATCH /api/admin/admins/[id]` refuse tout
+    changement de rôle qui ne se fait pas strictement entre
+    `COMPTABILITE` et `SECRETARIAT`.
 
-  Les trois rôles peuvent modifier le nom, le jour, l'horaire et le
+  Les quatre rôles peuvent modifier le nom, le jour, l'horaire et le
   statut AJB d'un cours existant depuis sa fiche (`PATCH
   /api/admin/courses/[id]`, élargi le 17.09.2026 puis le 18.09.2026 pour
   le statut AJB) — le code du cours (identifiant analytique unique,
@@ -164,7 +177,8 @@ Deux types de comptes, avec la même mécanique de session (cookie signé,
   rattachements musicien·ne/co-enseignant·e (sur la fiche du cours comme
   sur la fiche du prof, les deux vues restant toujours cohérentes puisque
   ce sont les mêmes endpoints) sont réservés à `ADMIN`, ou à un compte
-  `COMPTABILITE`/`DIRECTION` avec le réglage individuel `canManageCourses`
+  `COMPTABILITE`/`DIRECTION`/`SECRETARIAT` avec le réglage individuel
+  `canManageCourses`
   (voir `canManageCourses()` dans `src/lib/auth.ts`) — accordé le
   18.09.2026 à Aurélie, Laure et Marine, sans l'ouvrir à tout le rôle pour
   éviter tout effet de bord sur d'éventuels autres comptes ; élargi le
@@ -174,9 +188,10 @@ Deux types de comptes, avec la même mécanique de session (cookie signé,
   (cours ou prof) reste bloquée dès qu'un historique existe (changement
   déclaré, participation, etc., pour ne jamais perdre de données) — le
   bouton "Désactiver" (réversible via "Réactiver") remplace la suppression
-  dans ce cas. La gestion des comptes admin/comptabilité/direction
-  eux-mêmes (création, rôle, `canManageCourses`, désactivation) reste
-  réservée à `ADMIN` seul, sur `/admin/administration`.
+  dans ce cas. La gestion des comptes admin/comptabilité/direction/
+  secrétariat eux-mêmes (création, rôle, `canManageCourses`,
+  désactivation) reste réservée à `ADMIN` seul, sur
+  `/admin/administration`.
 
   Toutes ces actions structurelles sont enregistrées dans
   `AdminActionLog` (voir section 4), consultable sur `/admin/journal`
@@ -211,7 +226,10 @@ fois le même jour :
 | Le 27 du mois (début de la période) | Crée une déclaration vierge (`DRAFT`) pour chaque prof actif |
 | Le 16 à 9h (J-4) | Envoie un rappel par email aux profs dont la déclaration du mois est encore totalement vide (aucune entrée, aucune réponse à "y a-t-il eu des changements ?") |
 | Le 20 à 9h (J-0, matin de la date limite) | Dernier rappel : envoyé à tous les profs n'ayant pas encore soumis manuellement, même avec un brouillon en cours (dernier filet avant la clôture) |
-| Le 20 à 21h (date limite) | Verrouille toutes les déclarations non soumises manuellement, les marque `SUBMITTED_AUTO`, notifie chaque prof par email, puis envoie le mail de clôture (résumé + Excel) à Admin/Comptabilité/Direction |
+| Le 20 à 21h (date limite) | Verrouille toutes les déclarations non soumises manuellement, les marque `SUBMITTED_AUTO`, notifie chaque prof par email, puis envoie le mail de clôture "verrouillage" (résumé + Excel) à Admin/Comptabilité/Direction |
+| Du 20 à 22h au 26 à 22h, chaque jour | Envoie à Comptabilité/Direction le résumé quotidien des entrées tardives (voir "Résumé quotidien" ci-dessous) — uniquement s'il y en a eu au moins une ce jour-là |
+| Le 26 à 23h | Envoie à Comptabilité le mail de résumé "final" (même contenu que celui du 20, recalculé pour inclure les entrées tardives 21-26) |
+| Le 30 à 9h (ou dernier jour du mois si le mois en a moins de 30, ex. février) | Envoie à Secrétariat le mail de résumé "secrétariat" (même contenu que les deux précédents) |
 
 ### Période de paie (27 → 26) et fenêtre tardive
 
@@ -230,10 +248,14 @@ date limite de soumission (le 20) :
   déclaration déjà soumise (manuellement ou automatiquement) reste
   verrouillée telle quelle, mais le prof peut encore signaler un
   changement de dernière minute depuis sa page — chaque ligne ajoutée dans
-  ce créneau est marquée `tardif` en base, et un email est envoyé à tous
-  les comptes `COMPTABILITE`/`DIRECTION` actifs pour qu'ils décident de
+  ce créneau est marquée `tardif` en base (repérable dans l'export Excel,
+  colonnes "Tardif"), pour que Comptabilité/Direction décident de
   l'inclure sur le salaire du mois courant ou de le reporter au mois
-  suivant (repérable dans l'export Excel, colonnes "Tardif").
+  suivant. Depuis le 21.09.2026, ces entrées ne déclenchent plus d'alerte
+  immédiate par email : elles sont regroupées dans **un résumé envoyé une
+  fois par jour** (à 22h, s'il y a eu au moins une entrée tardive ce
+  jour-là) à `COMPTABILITE`/`DIRECTION`, pour éviter de multiplier les
+  emails — voir section 7.
 - **Après le 26** : la période est totalement close, plus aucune saisie
   n'est possible (ni normale, ni tardive).
 
@@ -254,9 +276,9 @@ fiche) voit apparaître dans son décompte :
 - entre la date limite (20 à 21h) et la fin de la période (26 à 23h59),
   une option **"cours AJB tardif"** distincte du changement tardif général
   (texte libre pour le nom du cours, plus date/heure/commentaire —
-  `AjbLateEntry`), qui déclenche la même alerte email à
-  `COMPTABILITE`/`DIRECTION` que les autres entrées tardives et compte
-  elle aussi pour +1 dans le total du mois.
+  `AjbLateEntry`), qui rejoint le même résumé quotidien que les autres
+  entrées tardives (voir ci-dessus et section 7) et compte elle aussi
+  pour +1 dans le total du mois.
 
 Le rappel par email de ces profs inclut un paragraphe spécifique
 expliquant tout ceci. Le résumé Excel (colonnes "Cours AJB (mois)" et
@@ -265,7 +287,7 @@ comptabilité de repérer d'un coup d'œil qui a bien rempli son champ.
 
 ## 7. Emails
 
-Sept types d'emails, tous envoyés via `src/lib/email.ts` (SMTP
+Six types d'emails, tous envoyés via `src/lib/email.ts` (SMTP
 Infomaniak, adresse d'expédition configurable via `MAIL_FROM`) :
 
 1. **Bienvenue** — à la création d'un compte, avec identifiant + mot de
@@ -276,16 +298,27 @@ Infomaniak, adresse d'expédition configurable via `MAIL_FROM`) :
    paragraphe spécifique pour les profs `ajbTeacher` (voir section 6).
 4. **Notification de soumission automatique** — après la date limite, si
    la déclaration a été verrouillée sans action du prof.
-5. **Alerte entrée tardive** — aux comptes `COMPTABILITE`/`DIRECTION`,
-   quand un prof signale un changement après la date limite (voir
-   "Période de paie et fenêtre tardive" en section 6).
-6. **Alerte cours AJB tardif** — même principe que l'alerte entrée tardive
-   ci-dessus, spécifique aux cours AJB signalés en texte libre (voir
-   "Cours AJB" en section 6).
-7. **Mail de clôture** — à Admin/Comptabilité/Direction, juste après le
-   verrouillage du 20 à 21h : fichier Excel du cycle en pièce jointe, plus
-   un résumé dans le corps (envois auto/manuels, profs ayant déclaré des
-   changements, profs `ajbTeacher` ayant rempli ou non leur champ AJB).
+5. **Résumé quotidien des entrées tardives** (`sendLateEntriesDailyDigest`)
+   — à `COMPTABILITE`/`DIRECTION`, une fois par jour à 22h entre la date
+   limite (20) et la fin de la période (26), et seulement s'il y a eu au
+   moins une entrée tardive (changement classique ou cours AJB, voir
+   section 6) ce jour-là. Remplace, depuis le 21.09.2026, les deux
+   anciennes alertes envoyées immédiatement à chaque déclaration
+   (demande de Rene, pour réduire le volume d'emails reçus par Direction
+   et Comptabilité).
+6. **Mail de clôture** (`sendClosureSummaryEmail`, trois variantes,
+   contenu identique — stats de la période + fichier Excel en pièce
+   jointe — seuls le sujet, l'intro et les destinataires changent) :
+   - *verrouillage* — à Admin/Comptabilité/Direction, juste après le
+     verrouillage du 20 à 21h.
+   - *final* — à Comptabilité seule, le 26 à 23h ; mêmes chiffres que le
+     mail du 20 mais recalculés, donc incluant les éventuelles entrées
+     tardives du 21 au 26.
+   - *secrétariat* — au rôle Secrétariat seul, le 30 du mois (ou le
+     dernier jour du mois s'il en compte moins de 30) à 9h ; même contenu
+     que les deux précédents. C'est le seul email automatique que reçoit
+     Secrétariat — volontairement, pour ne pas la solliciter avec les
+     rappels/alertes destinés aux profs ou à la gestion quotidienne.
 
 Les noms de profs sont échappés avant insertion dans le HTML de l'email
 (protection contre l'injection de balisage).
@@ -344,34 +377,38 @@ copié ces codes dans un gestionnaire de mots de passe — voir
 - `/prof/mot-de-passe` : changement de mot de passe obligatoire à la
   première connexion.
 
-**Côté admin/comptabilité/direction** (`/admin`) :
+**Côté admin/comptabilité/direction/secrétariat** (`/admin`) :
 - Vue d'ensemble : tableau de bord filtrable (période, statut, changements,
   recherche) de toutes les déclarations, avec un indicateur de
   concordance (🟢/🔴/🟠/⚪) qui vérifie que les remplacements déclarés par
   un prof correspondent à ce que l'autre prof cité a lui-même déclaré.
   Export Excel (classeur complet ou sélection de profs cochés dans une
-  grille dédiée) pour `ADMIN`, `COMPTABILITE` et `DIRECTION`.
-- `/admin/cours` : gestion des cours (modification pour les trois rôles ;
+  grille dédiée) pour `ADMIN`, `COMPTABILITE`, `DIRECTION` et
+  `SECRETARIAT`.
+- `/admin/cours` : gestion des cours (modification pour les quatre rôles ;
   ajout, désactivation/réactivation, suppression, changement de titulaire
   et gestion des participant·es supplémentaires réservés à `ADMIN` ou un
   compte `canManageCourses`). Une case à cocher permet d'afficher aussi
   les cours désactivés, pour les réactiver.
-- `/admin/profs` (ouvert aux trois rôles, comme `/admin/cours` ; remplace
+- `/admin/profs` (ouvert aux quatre rôles, comme `/admin/cours` ; remplace
   l'ancien tableau "Comptes des profs" de `/admin/administration`) :
   liste des profs et musicien·nes — ajout, changement de rôle, case
   `ajbTeacher`, activation/réinitialisation de compte, désactivation/
   suppression réservés à `ADMIN` ou un compte `canManageCourses`.
 - `/admin/profs/[id]` : fiche d'un prof — cours dont il/elle est
-  titulaire et interventions comme musicien·ne/co-enseignant·e
-  (ajout/retrait réservés à `ADMIN` ou un compte `canManageCourses` ; les
-  mêmes endpoints que `/admin/cours/[id]`, donc les deux vues restent
-  toujours cohérentes entre elles), historique complet de ses
-  déclarations (avec bouton "Effacer" pour une déclaration de test ou une
-  erreur de saisie).
+  titulaire et interventions comme musicien·ne/co-enseignant·e, y compris
+  les cours désactivés (affichés avec un badge "Désactivé" plutôt que
+  masqués, pour garder une vue complète sur cette fiche) (ajout/retrait
+  réservés à `ADMIN` ou un compte `canManageCourses` ; les mêmes endpoints
+  que `/admin/cours/[id]`, donc les deux vues restent toujours cohérentes
+  entre elles), historique complet de ses déclarations (avec bouton
+  "Effacer" pour une déclaration de test ou une erreur de saisie).
 - `/admin/administration` (réservé au rôle `ADMIN`) : QR code d'accès à
   imprimer, import annuel du planning, gestion des comptes admin/
-  comptabilité/direction (rôle, réglage `canManageCourses`, et les deux
-  comptes protégés qui ne peuvent être ni désactivés ni supprimés).
+  comptabilité/direction/secrétariat (rôle — avec bascule
+  Comptabilité ↔ Secrétariat depuis un sélecteur, voir section 5 —,
+  réglage `canManageCourses`, et les deux comptes protégés qui ne peuvent
+  être ni désactivés ni supprimés).
 - `/admin/journal` (réservé au rôle `ADMIN`) : historique chronologique de
   toutes les actions structurelles backend (cours, profs, musicien·nes,
   comptes) — qui a fait quoi et quand, pour pouvoir corriger en cas

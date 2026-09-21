@@ -18,8 +18,19 @@ import {
   DEADLINE_DAY,
   DEADLINE_HOUR,
   PERIOD_START_DAY,
+  PERIOD_END_DAY,
+  LATE_DIGEST_HOUR,
+  COMPTA_FINAL_SUMMARY_HOUR,
+  SECRETARIAT_RECAP_HOUR,
+  secretariatRecapDay,
+  zonedDayBoundsUtc,
 } from "./dates";
-import { sendReminderEmail, sendAutoSubmitNotice, sendClosureSummaryEmail } from "./email";
+import {
+  sendReminderEmail,
+  sendAutoSubmitNotice,
+  sendClosureSummaryEmail,
+  sendLateEntriesDailyDigest,
+} from "./email";
 import { generateXlsxForPeriod } from "./xlsxExport";
 import { DeclarationStatus, AdminRole } from "@prisma/client";
 
@@ -168,18 +179,23 @@ async function lockAndAutoSubmit(period: string, dateStr: string) {
   }
 
   await markRan(jobKey, `${autoSubmitted} déclaration(s) verrouillée(s) et soumise(s) automatiquement pour ${period}.`);
-  await sendClosureSummary(period);
+  await sendSummary(period, "verrouillage", [AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
   return { ran: true, autoSubmitted };
 }
 
 /**
- * Mail de clôture à Admin + Comptabilité + Direction, juste après le
- * verrouillage/l'auto-soumission ci-dessus — demande de Rene du
- * 18.09.2026. Volontairement dans une fonction à part (plutôt qu'un
- * échec bloquant `lockAndAutoSubmit`) : un souci d'envoi ne doit jamais
- * empêcher la clôture elle-même de s'être bien passée.
+ * Résumé (stats + export Excel) envoyé à un ensemble de rôles donné, avec
+ * un habillage différent selon le moment — demande de Rene du 21.09.2026 :
+ *   - "verrouillage" (le 20, à Admin + Comptabilité + Direction, inchangé) ;
+ *   - "final" (le 26, à Comptabilité seule, une fois la fenêtre tardive
+ *     terminée — recalculé à ce moment-là, donc inclut automatiquement les
+ *     entrées tardives ajoutées entre le 20 et le 26) ;
+ *   - "secretariat" (le 30 ou dernier jour du mois, à Secrétariat seule).
+ * Volontairement dans une fonction à part de son appelant (plutôt qu'un
+ * échec bloquant) : un souci d'envoi ne doit jamais empêcher le reste du
+ * traitement (verrouillage, etc.) de s'être bien passé.
  */
-async function sendClosureSummary(period: string) {
+async function sendSummary(period: string, kind: "verrouillage" | "final" | "secretariat", roles: AdminRole[]) {
   try {
     const [declarations, ajbTeachers, recipients] = await Promise.all([
       prisma.monthlyDeclaration.findMany({
@@ -194,7 +210,7 @@ async function sendClosureSummary(period: string) {
         },
       }),
       prisma.adminUser.findMany({
-        where: { active: true, role: { in: [AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION] } },
+        where: { active: true, role: { in: roles } },
         select: { email: true },
       }),
     ]);
@@ -219,6 +235,7 @@ async function sendClosureSummary(period: string) {
       to,
       period,
       xlsxBuffer,
+      kind,
       stats: {
         totalDeclarations: declarations.length,
         autoSubmittedCount,
@@ -230,7 +247,111 @@ async function sendClosureSummary(period: string) {
       },
     });
   } catch (e) {
-    console.error("Échec d'envoi du mail de clôture :", e);
+    console.error(`Échec d'envoi du résumé (${kind}) :`, e);
+  }
+}
+
+/**
+ * Le 26 (fin réelle de la période, voir PERIOD_END_DAY) : résumé final à la
+ * comptabilité, une fois la fenêtre tardive terminée — demande de Rene du
+ * 21.09.2026 (elle garde aussi celui du 20, ci-dessus, qui reste envoyé
+ * dans lockAndAutoSubmit).
+ */
+async function sendComptaFinalSummary(period: string, dateStr: string) {
+  const jobKey = `${dateStr}:compta-final`;
+  if (await alreadyRan(jobKey)) return { ran: false };
+  await sendSummary(period, "final", [AdminRole.COMPTABILITE]);
+  await markRan(jobKey, `Résumé final (26) envoyé à Comptabilité pour ${period}.`);
+  return { ran: true };
+}
+
+/**
+ * Le 30 (ou dernier jour du mois s'il en compte moins, voir
+ * secretariatRecapDay) : récapitulatif allégé au secrétariat — demande de
+ * Rene du 21.09.2026. `period` est calculé directement (sans currentPeriod,
+ * qui bascule déjà sur le mois suivant à partir du 27) : le 30 tombe
+ * toujours dans le même mois civil que la clôture du 26 qu'il récapitule.
+ */
+async function sendSecretariatRecap(period: string, dateStr: string) {
+  const jobKey = `${dateStr}:secretariat-recap`;
+  if (await alreadyRan(jobKey)) return { ran: false };
+  await sendSummary(period, "secretariat", [AdminRole.SECRETARIAT]);
+  await markRan(jobKey, `Récapitulatif (30) envoyé à Secrétariat pour ${period}.`);
+  return { ran: true };
+}
+
+/**
+ * Chaque jour de la fenêtre tardive (20 à 21h jusqu'au 26 inclus, voir
+ * DEADLINE_DAY/PERIOD_END_DAY dans dates.ts) : un seul résumé groupant
+ * toutes les entrées tardives (changements + cours AJB) signalées ce
+ * jour-là, envoyé à Comptabilité ET Direction — remplace les alertes
+ * immédiates par entrée qui existaient avant (demande de Rene du
+ * 21.09.2026, pour réduire le volume d'emails). Rien n'est envoyé s'il n'y
+ * a eu aucune entrée tardive ce jour-là.
+ */
+async function sendDueLateDigest(period: string, dateStr: string, year: number, month: number, day: number) {
+  const jobKey = `${dateStr}:late-digest`;
+  if (await alreadyRan(jobKey)) return { ran: false };
+
+  const { start, end } = zonedDayBoundsUtc(year, month, day);
+  const dateLabel = `${String(day).padStart(2, "0")}.${String(month).padStart(2, "0")}.${year}`;
+
+  try {
+    const [items, ajbEntries, recipients] = await Promise.all([
+      prisma.declarationItem.findMany({
+        where: {
+          tardif: true,
+          createdAt: { gte: start, lt: end },
+          declaration: { period },
+        },
+        include: { course: true, declaration: { select: { teacher: { select: { name: true } } } } },
+      }),
+      prisma.ajbLateEntry.findMany({
+        where: {
+          createdAt: { gte: start, lt: end },
+          declaration: { period },
+        },
+        include: { declaration: { select: { teacher: { select: { name: true } } } } },
+      }),
+      prisma.adminUser.findMany({
+        where: { active: true, role: { in: [AdminRole.COMPTABILITE, AdminRole.DIRECTION] } },
+        select: { email: true },
+      }),
+    ]);
+
+    const TYPE_LABELS: Record<string, string> = {
+      REMPLACEMENT_EFFECTUE: "Remplacement effectué",
+      ABSENCE_REMPLACEE: "Absence remplacée",
+      ABSENCE_NON_REMPLACEE: "Absence non remplacée",
+      AUTRE: "Autre changement",
+    };
+
+    const to = recipients.map((r) => r.email).filter(Boolean);
+    await sendLateEntriesDailyDigest({
+      to,
+      period,
+      dateLabel,
+      items: items.map((i) => ({
+        teacherName: i.declaration.teacher.name,
+        typeLabel: TYPE_LABELS[i.type] ?? i.type,
+        courseLabel: i.course ? `${i.course.code} — ${i.course.nomCours}` : null,
+        date: i.date ? i.date.toISOString().slice(0, 10) : null,
+        comment: i.comment,
+      })),
+      ajbEntries: ajbEntries.map((e) => ({
+        teacherName: e.declaration.teacher.name,
+        nomCours: e.nomCours,
+        date: e.date ? e.date.toISOString().slice(0, 10) : null,
+        heure: e.heure,
+        comment: e.comment,
+      })),
+    });
+    await markRan(jobKey, `Résumé tardif du ${dateLabel} : ${items.length + ajbEntries.length} entrée(s).`);
+    return { ran: true, count: items.length + ajbEntries.length };
+  } catch (e) {
+    console.error("Échec d'envoi du résumé quotidien des entrées tardives :", e);
+    await markRan(jobKey, `Échec d'envoi du résumé tardif du ${dateLabel}.`);
+    return { ran: true, error: true };
   }
 }
 
@@ -254,6 +375,29 @@ export async function runDailyCronTick(now: Date = new Date()) {
 
   if (day === DEADLINE_DAY && hour >= DEADLINE_HOUR) {
     results.deadline = await lockAndAutoSubmit(period, dateStr);
+  }
+
+  // Fenêtre tardive : du 20 (après le verrouillage) au 26 inclus (fin
+  // réelle de la période, voir PERIOD_END_DAY) — résumé quotidien groupé à
+  // Comptabilité + Direction, seulement s'il y a eu au moins une entrée.
+  if (day >= DEADLINE_DAY && day <= PERIOD_END_DAY && hour >= LATE_DIGEST_HOUR) {
+    results.lateDigest = await sendDueLateDigest(period, dateStr, year, month, day);
+  }
+
+  // Le 26 : résumé final à la comptabilité, une fois la fenêtre tardive
+  // terminée (en plus de celui du 20 ci-dessus, qu'elle garde aussi).
+  if (day === PERIOD_END_DAY && hour >= COMPTA_FINAL_SUMMARY_HOUR) {
+    results.comptaFinal = await sendComptaFinalSummary(period, dateStr);
+  }
+
+  // Le 30 (ou dernier jour du mois) : récapitulatif au secrétariat. `period`
+  // est reconstruit directement (année-mois civils courants) et non via
+  // currentPeriod(), qui bascule déjà sur la période suivante à partir du
+  // 27 — le 30 tombe pourtant toujours dans le mois de la période qui vient
+  // de se terminer le 26.
+  if (day === secretariatRecapDay(year, month) && hour >= SECRETARIAT_RECAP_HOUR) {
+    const recapPeriod = `${year}-${String(month).padStart(2, "0")}`;
+    results.secretariatRecap = await sendSecretariatRecap(recapPeriod, dateStr);
   }
 
   return results;

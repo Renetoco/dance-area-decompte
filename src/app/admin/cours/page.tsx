@@ -4,7 +4,7 @@ import { AdminRole } from "@prisma/client";
 import AdminCourses from "@/components/AdminCourses";
 
 export default async function CoursListPage() {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) redirect("/connexion");
 
   return (

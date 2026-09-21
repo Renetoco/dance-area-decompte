@@ -9,7 +9,7 @@ import { AdminRole } from "@prisma/client";
 // canManageCourses ; auparavant réservé au seul compte ADMIN) — cohérent
 // avec le reste de la gestion des profs sur /admin/profs.
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin || !canManageCourses(admin)) {
     return NextResponse.json({ error: "Non autorisé à réinitialiser le mot de passe de ce prof." }, { status: 403 });
   }

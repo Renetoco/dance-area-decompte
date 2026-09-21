@@ -9,7 +9,7 @@ import AdminTeachers from "@/components/AdminTeachers";
 // (réservé au seul compte ADMIN). L'ajout/la modification restent réservés
 // à qui peut gérer les cours (voir canManageCourses).
 export default async function ProfsListPage() {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) redirect("/connexion");
 
   return (

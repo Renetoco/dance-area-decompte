@@ -130,64 +130,47 @@ export async function sendReminderEmail(opts: {
   await send(to, subject, html, text);
 }
 
-export async function sendLateEntryAlert(opts: {
+/**
+ * Résumé QUOTIDIEN (et non plus immédiat par entrée) des changements et
+ * cours AJB signalés tardivement (entre la deadline du 20 et la fin de la
+ * période le 26) — un seul email groupant tout ce qui est arrivé dans la
+ * journée, envoyé uniquement s'il y a effectivement eu au moins une entrée
+ * ce jour-là. Remplace les alertes immédiates par entrée (une par une)
+ * qui existaient auparavant — demande de Rene du 21.09.2026, pour réduire
+ * le volume d'emails reçus par la comptabilité et la direction.
+ */
+export async function sendLateEntriesDailyDigest(opts: {
   to: string[];
-  teacherName: string;
   period: string;
-  item: { typeLabel: string; courseLabel: string | null; date: string | null; comment: string | null };
+  dateLabel: string;
+  items: { teacherName: string; typeLabel: string; courseLabel: string | null; date: string | null; comment: string | null }[];
+  ajbEntries: { teacherName: string; nomCours: string; date: string | null; heure: string | null; comment: string | null }[];
 }) {
-  const { to, teacherName, period, item } = opts;
+  const { to, period, dateLabel, items, ajbEntries } = opts;
   if (to.length === 0) return;
+  const total = items.length + ajbEntries.length;
+  if (total === 0) return;
 
-  const subject = `Changement tardif signalé — ${teacherName} (${formatPeriodLabel(period)})`;
-  const detailLine = [item.typeLabel, item.courseLabel, item.date]
-    .filter((v): v is string => Boolean(v))
-    .map((v) => escapeHtml(v))
-    .join(" — ");
-  const detailLineText = [item.typeLabel, item.courseLabel, item.date].filter(Boolean).join(" — ");
+  const subject = `Entrées tardives du ${dateLabel} — décompte ${formatPeriodLabel(period)} (${total})`;
+
+  const itemLine = (i: (typeof items)[number]) =>
+    [i.teacherName, i.typeLabel, i.courseLabel, i.date].filter(Boolean).join(" — ") +
+    (i.comment ? ` (${i.comment})` : "");
+  const ajbLine = (e: (typeof ajbEntries)[number]) =>
+    [e.teacherName, "Cours AJB", e.nomCours, e.date, e.heure].filter(Boolean).join(" — ") +
+    (e.comment ? ` (${e.comment})` : "");
 
   const html = wrapHtml(`
     <p>Bonjour,</p>
-    <p><strong>${escapeHtml(teacherName)}</strong> a signalé un changement après la date limite du
-    décompte de ${formatPeriodLabel(period)}. Sa déclaration avait déjà été envoyée et reste
-    inchangée ; cette ligne s'y ajoute, marquée « tardive ».</p>
-    <p>${detailLine}</p>
-    ${item.comment ? `<p>Commentaire : ${escapeHtml(item.comment)}</p>` : ""}
-    <p>À vous de décider si ce changement est pris en compte sur le salaire de ce mois-ci ou
-    reporté sur le mois suivant — il est repérable dans l'export Excel.</p>
+    <p>${total} entrée(s) tardive(s) ont été signalée(s) le ${escapeHtml(dateLabel)} sur le décompte
+    ${formatPeriodLabel(period)} (après la date limite du 20, dans la fenêtre encore ouverte jusqu'au 26).
+    Les déclarations déjà soumises restent inchangées ; ces lignes s'y ajoutent, marquées « tardives ».</p>
+    ${items.length > 0 ? `<ul>${items.map((i) => `<li>${escapeHtml(itemLine(i))}</li>`).join("")}</ul>` : ""}
+    ${ajbEntries.length > 0 ? `<ul>${ajbEntries.map((e) => `<li>${escapeHtml(ajbLine(e))}</li>`).join("")}</ul>` : ""}
+    <p>À vous de décider si ces changements sont pris en compte sur le salaire de ce mois-ci ou
+    reportés sur le mois suivant — ils sont repérables dans l'export Excel.</p>
   `);
-  const text = `${teacherName} a signalé un changement après la date limite du décompte de ${formatPeriodLabel(period)}. Sa déclaration avait déjà été envoyée et reste inchangée ; cette ligne s'y ajoute, marquée "tardive".\n\n${detailLineText}\n${item.comment ? `Commentaire : ${item.comment}\n` : ""}\nÀ vous de décider si ce changement est pris en compte sur le salaire de ce mois-ci ou reporté sur le mois suivant — il est repérable dans l'export Excel.`;
-  await send(to.join(", "), subject, html, text);
-}
-
-/** Alerte comptabilité/direction pour un changement AJB tardif (20-26) — voir AjbLateEntry. */
-export async function sendAjbLateEntryAlert(opts: {
-  to: string[];
-  teacherName: string;
-  period: string;
-  entry: { date: string | null; heure: string | null; nomCours: string; comment: string | null };
-}) {
-  const { to, teacherName, period, entry } = opts;
-  if (to.length === 0) return;
-
-  const subject = `Cours AJB tardif signalé — ${teacherName} (${formatPeriodLabel(period)})`;
-  const detailLine = [entry.nomCours, entry.date, entry.heure]
-    .filter((v): v is string => Boolean(v))
-    .map((v) => escapeHtml(v))
-    .join(" — ");
-  const detailLineText = [entry.nomCours, entry.date, entry.heure].filter(Boolean).join(" — ");
-
-  const html = wrapHtml(`
-    <p>Bonjour,</p>
-    <p><strong>${escapeHtml(teacherName)}</strong> a signalé un cours AJB donné après la date limite du
-    décompte de ${formatPeriodLabel(period)} (entre le 20 et la fin de la période). Sa déclaration reste
-    inchangée ; ce cours s'y ajoute, marqué « tardif ».</p>
-    <p>${detailLine}</p>
-    ${entry.comment ? `<p>Commentaire : ${escapeHtml(entry.comment)}</p>` : ""}
-    <p>À vous de décider si ce cours est pris en compte sur le salaire de ce mois-ci ou reporté sur le
-    mois suivant — il est repérable dans l'export Excel.</p>
-  `);
-  const text = `${teacherName} a signalé un cours AJB donné après la date limite du décompte de ${formatPeriodLabel(period)}. Sa déclaration reste inchangée ; ce cours s'y ajoute, marqué "tardif".\n\n${detailLineText}\n${entry.comment ? `Commentaire : ${entry.comment}\n` : ""}\nÀ vous de décider si ce cours est pris en compte sur le salaire de ce mois-ci ou reporté sur le mois suivant — il est repérable dans l'export Excel.`;
+  const text = `${total} entrée(s) tardive(s) signalée(s) le ${dateLabel} sur le décompte ${formatPeriodLabel(period)} (après la date limite du 20, fenêtre ouverte jusqu'au 26).\n\n${[...items.map(itemLine), ...ajbEntries.map(ajbLine)].map((l) => `- ${l}`).join("\n")}\n\nÀ vous de décider si ces changements sont pris en compte sur le salaire de ce mois-ci ou reportés sur le mois suivant — ils sont repérables dans l'export Excel.`;
   await send(to.join(", "), subject, html, text);
 }
 
@@ -210,20 +193,36 @@ export async function sendClosureSummaryEmail(opts: {
     ajbFilledNames: string[];
     ajbMissingNames: string[];
   };
+  // "verrouillage" (le 20, comme avant) | "final" (le 26, à la comptabilité,
+  // une fois la fenêtre tardive terminée — inclut donc les entrées tardives
+  // arrivées entre-temps) | "secretariat" (le 30, récap allégé) — demande
+  // de Rene du 21.09.2026. Le contenu (stats + Excel) est identique dans
+  // les 3 cas, seul le sujet/l'intro change pour rester clair sur le
+  // moment et le destinataire.
+  kind?: "verrouillage" | "final" | "secretariat";
 }) {
-  const { to, period, xlsxBuffer, stats } = opts;
+  const { to, period, xlsxBuffer, stats, kind = "verrouillage" } = opts;
   if (to.length === 0) return;
 
-  const subject = `Clôture du décompte ${formatPeriodLabel(period)} — résumé et export Excel`;
   const periodeLabel = formatPeriodLabel(period);
+  const SUBJECTS: Record<string, string> = {
+    verrouillage: `Clôture du décompte ${periodeLabel} — résumé et export Excel`,
+    final: `Résumé final du décompte ${periodeLabel} (après la fenêtre tardive) — export Excel`,
+    secretariat: `Récapitulatif du décompte ${periodeLabel} — export Excel`,
+  };
+  const INTROS: Record<string, string> = {
+    verrouillage: `La date limite du décompte de <strong>${periodeLabel}</strong> vient de passer. Voici un résumé rapide, et le fichier Excel complet est joint à ce mail.`,
+    final: `La fenêtre de saisie tardive du décompte de <strong>${periodeLabel}</strong> vient de se terminer (le 26). Voici le résumé final, entrées tardives incluses, et le fichier Excel complet est joint à ce mail.`,
+    secretariat: `Voici le récapitulatif du décompte de <strong>${periodeLabel}</strong>, avec le fichier Excel complet en pièce jointe.`,
+  };
+  const subject = SUBJECTS[kind];
 
   const listHtml = (names: string[]) =>
     names.length > 0 ? `<ul>${names.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>` : "<p><em>Aucun·e.</em></p>";
 
   const html = wrapHtml(`
     <p>Bonjour,</p>
-    <p>La date limite du décompte de <strong>${periodeLabel}</strong> vient de passer. Voici un résumé rapide,
-    et le fichier Excel complet est joint à ce mail.</p>
+    <p>${INTROS[kind]}</p>
     <ul>
       <li>${stats.totalDeclarations} déclaration(s) au total</li>
       <li>${stats.manualSubmittedCount} envoyée(s) manuellement par les profs</li>
@@ -238,7 +237,12 @@ export async function sendClosureSummaryEmail(opts: {
     ${listHtml(stats.ajbMissingNames)}
   `);
 
-  const text = `Clôture du décompte ${periodeLabel}.\n\n${stats.totalDeclarations} déclaration(s) au total\n${stats.manualSubmittedCount} envoyée(s) manuellement\n${stats.autoSubmittedCount} envoyée(s) automatiquement\n${stats.teachersWithChangesCount} prof(s) ont déclaré des changements\n\nProfs ayant déclaré des changements :\n${stats.teachersWithChangesNames.map((n) => `- ${n}`).join("\n") || "(aucun·e)"}\n\nCours AJB — rempli :\n${stats.ajbFilledNames.map((n) => `- ${n}`).join("\n") || "(aucun·e)"}\n\nCours AJB — non rempli :\n${stats.ajbMissingNames.map((n) => `- ${n}`).join("\n") || "(aucun·e)"}`;
+  const TEXT_INTROS: Record<string, string> = {
+    verrouillage: `Clôture du décompte ${periodeLabel}.`,
+    final: `Résumé final du décompte ${periodeLabel} (après la fenêtre tardive).`,
+    secretariat: `Récapitulatif du décompte ${periodeLabel}.`,
+  };
+  const text = `${TEXT_INTROS[kind]}\n\n${stats.totalDeclarations} déclaration(s) au total\n${stats.manualSubmittedCount} envoyée(s) manuellement\n${stats.autoSubmittedCount} envoyée(s) automatiquement\n${stats.teachersWithChangesCount} prof(s) ont déclaré des changements\n\nProfs ayant déclaré des changements :\n${stats.teachersWithChangesNames.map((n) => `- ${n}`).join("\n") || "(aucun·e)"}\n\nCours AJB — rempli :\n${stats.ajbFilledNames.map((n) => `- ${n}`).join("\n") || "(aucun·e)"}\n\nCours AJB — non rempli :\n${stats.ajbMissingNames.map((n) => `- ${n}`).join("\n") || "(aucun·e)"}`;
 
   await send(to.join(", "), subject, html, text, [
     {

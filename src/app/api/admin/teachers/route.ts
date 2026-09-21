@@ -5,7 +5,7 @@ import { logAdminAction } from "@/lib/auditLog";
 import { AdminRole, TeacherRole } from "@prisma/client";
 
 export async function GET() {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
 
   const teachers = await prisma.teacher.findMany({
@@ -41,7 +41,7 @@ export async function GET() {
 // Réservé à qui peut gérer les cours (demande de Rene du 18.09.2026, voir
 // canManageCourses ; auparavant réservé au seul compte ADMIN).
 export async function POST(req: NextRequest) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin || !canManageCourses(admin)) {
     return NextResponse.json({ error: "Non autorisé à ajouter un prof." }, { status: 403 });
   }

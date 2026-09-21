@@ -6,7 +6,7 @@ type AdminAccount = {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "COMPTABILITE" | "DIRECTION";
+  role: "ADMIN" | "COMPTABILITE" | "DIRECTION" | "SECRETARIAT";
   active: boolean;
   protected: boolean;
   canManageCourses: boolean;
@@ -16,13 +16,21 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Administrateur",
   COMPTABILITE: "Comptabilité",
   DIRECTION: "Direction",
+  SECRETARIAT: "Secrétariat",
 };
+
+// Un compte Comptabilité ou Secrétariat peut être basculé de l'un à l'autre
+// directement dans le tableau (mêmes droits, seule la fréquence des emails
+// automatiques change — voir cronJobs.ts). Admin et Direction ne changent
+// jamais de catégorie par ce biais (demande de Rene du 21.09.2026) : le
+// serveur refuse toute autre combinaison (voir PATCH /api/admin/admins/[id]).
+const SWITCHABLE_ROLES = ["COMPTABILITE", "SECRETARIAT"] as const;
 
 export default function AdminAccounts() {
   const [admins, setAdmins] = useState<AdminAccount[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"COMPTABILITE" | "DIRECTION" | "ADMIN">("COMPTABILITE");
+  const [role, setRole] = useState<"COMPTABILITE" | "SECRETARIAT" | "DIRECTION" | "ADMIN">("COMPTABILITE");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -117,6 +125,28 @@ export default function AdminAccounts() {
     }
   }
 
+  async function changerCategorie(a: AdminAccount, newRole: "COMPTABILITE" | "SECRETARIAT") {
+    if (newRole === a.role) return;
+    setBusyId(a.id);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/admins/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Échec du changement de catégorie.");
+        return;
+      }
+      setMessage(`${a.name} est maintenant en catégorie ${ROLE_LABELS[newRole]}.`);
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function toggleCanManageCourses(a: AdminAccount) {
     setBusyId(a.id);
     setMessage(null);
@@ -164,8 +194,11 @@ export default function AdminAccounts() {
   return (
     <div className="card">
       <p className="muted">
-        Comptes avec accès au dashboard (comptabilité, direction) ou administrateur complet. L'email peut être
-        corrigé à tout moment ci-dessous ; la personne garde son mot de passe existant.
+        Comptes avec accès au dashboard (comptabilité, secrétariat, direction) ou administrateur complet. L'email
+        peut être corrigé à tout moment ci-dessous ; la personne garde son mot de passe existant. Comptabilité et
+        secrétariat ont les mêmes droits — seule la fréquence des emails automatiques diffère (secrétariat en reçoit
+        beaucoup moins) — et un compte peut être basculé de l'un à l'autre directement dans la colonne « Rôle ».
+        Admin et Direction ne changent jamais de catégorie.
       </p>
 
       <div className="table-scroll">
@@ -206,7 +239,23 @@ export default function AdminAccounts() {
                       )}
                     </div>
                   </td>
-                  <td>{ROLE_LABELS[a.role]}</td>
+                  <td>
+                    {(SWITCHABLE_ROLES as readonly string[]).includes(a.role) ? (
+                      <select
+                        value={a.role}
+                        disabled={busyId === a.id}
+                        onChange={(e) => changerCategorie(a, e.target.value as "COMPTABILITE" | "SECRETARIAT")}
+                      >
+                        {SWITCHABLE_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {ROLE_LABELS[r]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      ROLE_LABELS[a.role]
+                    )}
+                  </td>
                   <td>
                     {a.role === "ADMIN" ? (
                       <span className="muted" style={{ fontSize: "0.8rem" }}>
@@ -282,6 +331,7 @@ export default function AdminAccounts() {
         </div>
         <select value={role} onChange={(e) => setRole(e.target.value as any)} style={{ marginTop: 8 }}>
           <option value="COMPTABILITE">Comptabilité</option>
+          <option value="SECRETARIAT">Secrétariat</option>
           <option value="DIRECTION">Direction</option>
           <option value="ADMIN">Administrateur</option>
         </select>

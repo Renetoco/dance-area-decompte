@@ -2,15 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireTeacher } from "@/lib/auth";
 import { currentPeriod, isPastDeadline, isWithinLateWindow } from "@/lib/dates";
-import { sendLateEntryAlert } from "@/lib/email";
-import { ChangeType, DeclarationStatus, AdminRole } from "@prisma/client";
-
-const TYPE_LABELS: Record<string, string> = {
-  REMPLACEMENT_EFFECTUE: "Remplacement effectué",
-  ABSENCE_REMPLACEE: "Absence remplacée",
-  ABSENCE_NON_REMPLACEE: "Absence non remplacée",
-  AUTRE: "Autre changement",
-};
+import { ChangeType, DeclarationStatus } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   const teacher = await requireTeacher();
@@ -71,28 +63,10 @@ export async function POST(req: NextRequest) {
     include: { course: true, otherTeacher: { select: { id: true, name: true } } },
   });
 
-  if (isLate) {
-    try {
-      const recipients = await prisma.adminUser.findMany({
-        where: { active: true, role: { in: [AdminRole.COMPTABILITE, AdminRole.DIRECTION] } },
-        select: { email: true },
-      });
-      const to = recipients.map((r) => r.email).filter(Boolean);
-      await sendLateEntryAlert({
-        to,
-        teacherName: teacher.name,
-        period,
-        item: {
-          typeLabel: TYPE_LABELS[type] ?? type,
-          courseLabel: item.course ? `${item.course.code} — ${item.course.nomCours}` : null,
-          date: item.date ? item.date.toISOString().slice(0, 10) : null,
-          comment: item.comment,
-        },
-      });
-    } catch (e) {
-      console.error("Échec d'envoi de l'alerte entrée tardive :", e);
-    }
-  }
+  // Plus d'alerte immédiate à la création : les entrées tardives sont
+  // désormais regroupées dans un résumé quotidien envoyé à Comptabilité +
+  // Direction (voir sendDueLateDigest dans cronJobs.ts) — demande de Rene
+  // du 21.09.2026, pour réduire le volume d'emails.
 
   return NextResponse.json({ item });
 }

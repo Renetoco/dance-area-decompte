@@ -16,7 +16,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export default async function FicheCoursPage({ params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) redirect("/connexion");
 
   const course = await prisma.course.findUnique({
@@ -55,7 +55,7 @@ export default async function FicheCoursPage({ params }: { params: { id: string 
   // direction (demande de Rene du 17.09.2026) — distinct de `canEdit`
   // ci-dessus.
   const canEditCourseFields =
-    admin.role === "ADMIN" || admin.role === "COMPTABILITE" || admin.role === "DIRECTION";
+    admin.role === "ADMIN" || admin.role === "COMPTABILITE" || admin.role === "DIRECTION" || admin.role === "SECRETARIAT";
 
   return (
     <div>

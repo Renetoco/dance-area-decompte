@@ -39,7 +39,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
     data.active = active;
   }
-  if (role && role in AdminRole) data.role = role;
+  if (role && role in AdminRole && role !== target.role) {
+    // Un compte ne peut être basculé qu'entre Comptabilité et Secrétariat
+    // (mêmes droits, fréquence d'emails différente — voir cronJobs.ts) :
+    // Admin et Direction ne changent jamais de catégorie par ce biais
+    // (demande de Rene du 21.09.2026), et les comptes protégés (voir
+    // isProtectedAdminEmail) sont toujours Admin ou Direction donc déjà
+    // couverts par cette même règle.
+    const SWITCHABLE: AdminRole[] = [AdminRole.COMPTABILITE, AdminRole.SECRETARIAT];
+    if (!SWITCHABLE.includes(target.role) || !SWITCHABLE.includes(role)) {
+      return NextResponse.json(
+        { error: "Un compte ne peut être basculé qu'entre Comptabilité et Secrétariat." },
+        { status: 403 }
+      );
+    }
+    data.role = role;
+  }
   if (email) {
     const normalizedEmail = String(email).trim().toLowerCase();
     const existing = await prisma.adminUser.findUnique({ where: { email: normalizedEmail } });

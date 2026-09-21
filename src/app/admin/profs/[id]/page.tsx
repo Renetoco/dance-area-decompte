@@ -13,7 +13,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export default async function FicheProfPage({ params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) redirect("/connexion");
 
   const teacher = await prisma.teacher.findUnique({

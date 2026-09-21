@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 type LogEntry = {
   id: string;
   adminName: string;
-  adminRole: "ADMIN" | "COMPTABILITE" | "DIRECTION";
+  adminRole: "ADMIN" | "COMPTABILITE" | "DIRECTION" | "SECRETARIAT";
   description: string;
   createdAt: string;
 };
@@ -14,6 +14,7 @@ const ROLE_LABELS: Record<LogEntry["adminRole"], string> = {
   ADMIN: "Administrateur",
   COMPTABILITE: "Comptabilité",
   DIRECTION: "Direction",
+  SECRETARIAT: "Secrétariat",
 };
 
 export default function AdminJournal() {

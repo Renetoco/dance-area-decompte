@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 
-type Role = "ADMIN" | "COMPTABILITE" | "DIRECTION";
+type Role = "ADMIN" | "COMPTABILITE" | "DIRECTION" | "SECRETARIAT";
 
 type TeacherLite = { id: string; name: string; analyticCode: string; email: string | null };
 
@@ -134,7 +134,7 @@ export default function AdminDashboard() {
     if (res.ok) setDetail((await res.json()).declaration);
   }
 
-  const canExport = role === "ADMIN" || role === "COMPTABILITE" || role === "DIRECTION";
+  const canExport = role === "ADMIN" || role === "COMPTABILITE" || role === "DIRECTION" || role === "SECRETARIAT";
 
   return (
     <div>

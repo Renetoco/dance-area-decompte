@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export default function AdminNav({ role }: { role: "ADMIN" | "COMPTABILITE" | "DIRECTION" }) {
+export default function AdminNav({ role }: { role: "ADMIN" | "COMPTABILITE" | "DIRECTION" | "SECRETARIAT" }) {
   const pathname = usePathname();
   const links = [
     { href: "/admin", label: "Vue d'ensemble", icon: "▤" },

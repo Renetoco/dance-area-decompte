@@ -27,6 +27,41 @@ export const DEADLINE_HOUR = 21;
 export const REMINDER_OFFSETS_DAYS = [4, 0] as const; // J-4 et le matin du jour J (deadline)
 export const REMINDER_HOUR = 9;
 
+// Emails groupés à la comptabilité/direction/secrétariat — demande de Rene
+// du 21.09.2026, voir cronJobs.ts pour le détail de chaque envoi :
+//   - résumé quotidien des entrées tardives (comptabilité + direction),
+//     chaque jour de la fenêtre tardive (DEADLINE_DAY à PERIOD_END_DAY),
+//     seulement s'il y en a eu au moins une ce jour-là ;
+//   - résumé final avec export Excel, à la comptabilité, le jour même de
+//     PERIOD_END_DAY (le 26), une fois la fenêtre tardive terminée ;
+//   - récapitulatif allégé au secrétariat, une fois par mois, le 30 (ou le
+//     dernier jour du mois s'il n'y a pas de 30e jour civil, ex. février).
+export const LATE_DIGEST_HOUR = 22;
+export const COMPTA_FINAL_SUMMARY_HOUR = 23;
+export const SECRETARIAT_RECAP_DAY = 30; // ajusté au dernier jour du mois si besoin, voir secretariatRecapDay()
+export const SECRETARIAT_RECAP_HOUR = 9;
+
+/** Nombre de jours du mois "month" (1-12) de l'année "year". */
+export function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+/** Jour d'envoi du récapitulatif secrétariat pour le mois "month"/"year" :
+ * le 30, ou le dernier jour du mois s'il en compte moins de 30 (février). */
+export function secretariatRecapDay(year: number, month: number): number {
+  return Math.min(SECRETARIAT_RECAP_DAY, daysInMonth(year, month));
+}
+
+/** Bornes UTC [début, fin) du jour civil "day" du mois "month"/"year", à Genève. */
+export function zonedDayBoundsUtc(year: number, month: number, day: number): { start: Date; end: Date } {
+  const start = zonedTimeToUtc(year, month, day, 0, 0);
+  // new Date(year, month-1, day+1) gère nativement le débordement de fin de
+  // mois/année (ex. jour 31 d'un mois qui n'en a que 30) sans calcul manuel.
+  const next = new Date(year, month - 1, day + 1);
+  const end = zonedTimeToUtc(next.getFullYear(), next.getMonth() + 1, next.getDate(), 0, 0);
+  return { start, end };
+}
+
 /** Convertit une heure "murale" (ex. 20 septembre 2026, 21h00, à Genève) en Date UTC. */
 export function zonedTimeToUtc(
   year: number,

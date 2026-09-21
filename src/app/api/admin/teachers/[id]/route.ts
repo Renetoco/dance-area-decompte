@@ -13,7 +13,7 @@ const TEACHER_ROLE_LABELS: Record<TeacherRole, string> = {
 // Fiche détaillée d'un prof : ses cours (titulaire + participations
 // musicien/co-prof) et son historique de déclarations, toutes périodes.
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
 
   const teacher = await prisma.teacher.findUnique({
@@ -51,7 +51,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 // (demande de Rene du 18.09.2026, voir canManageCourses ; auparavant
 // réservé au seul compte ADMIN).
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin || !canManageCourses(admin)) {
     return NextResponse.json({ error: "Non autorisé à modifier ce prof." }, { status: 403 });
   }
@@ -173,7 +173,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 // Réservé à qui peut gérer les cours (demande de Rene du 18.09.2026, voir
 // canManageCourses ; auparavant réservé au seul compte ADMIN).
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin || !canManageCourses(admin)) {
     return NextResponse.json({ error: "Non autorisé à supprimer un prof." }, { status: 403 });
   }

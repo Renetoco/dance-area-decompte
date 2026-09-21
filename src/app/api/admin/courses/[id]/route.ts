@@ -10,7 +10,7 @@ import { AdminRole } from "@prisma/client";
 // (toutes périodes confondues) — permet de voir si plusieurs profs sont
 // intervenu·es sur le même cours, à la même date ou à des dates différentes.
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
 
   const course = await prisma.course.findUnique({
@@ -59,7 +59,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 // pour le titulaire — "l'info côté cours doit correspondre à l'info côté
 // prof", voir aussi la gestion symétrique depuis /admin/profs/[id]).
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
 
   const course = await prisma.course.findUnique({
@@ -155,7 +155,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 // un compte comptabilité/direction avec le réglage "gérer les cours" (voir
 // canManageCourses, demande de Rene du 18.09.2026).
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin || !canManageCourses(admin)) {
     return NextResponse.json({ error: "Non autorisé à supprimer des cours." }, { status: 403 });
   }

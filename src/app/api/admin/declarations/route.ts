@@ -5,7 +5,7 @@ import { currentPeriod } from "@/lib/dates";
 import { AdminRole, DeclarationStatus } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
 
   const { searchParams } = new URL(req.url);

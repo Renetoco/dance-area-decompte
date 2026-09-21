@@ -5,7 +5,7 @@ import { computeConcordance } from "@/lib/concordance";
 import { AdminRole, DeclarationStatus } from "@prisma/client";
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
 
   const declaration = await prisma.monthlyDeclaration.findUnique({

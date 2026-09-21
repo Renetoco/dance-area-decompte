@@ -14,6 +14,13 @@ enum AdminRole {
   ADMIN
   COMPTABILITE
   DIRECTION
+  // Mêmes droits que COMPTABILITE (voir canManageCourses et tous les
+  // contrôles d'accès backend, qui traitent COMPTABILITE et SECRETARIAT de
+  // façon identique) — seule différence : reçoit beaucoup moins d'emails
+  // automatiques (voir cronJobs.ts). Demande de Rene du 21.09.2026 : un
+  // compte peut être basculé entre COMPTABILITE et SECRETARIAT depuis
+  // /admin/administration ; ADMIN et DIRECTION ne changent jamais de rôle.
+  SECRETARIAT
 }
 
 enum DeclarationStatus {

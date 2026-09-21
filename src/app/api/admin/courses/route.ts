@@ -9,7 +9,7 @@ import { AdminRole } from "@prisma/client";
 // includeInactive=1 : aussi les cours désactivés (pour les réactiver) —
 // réservé à qui peut gérer les cours (voir canManageCourses).
 export async function GET(req: NextRequest) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin) return NextResponse.json({ error: "Non autorisé." }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 // à un compte comptabilité/direction avec le réglage "gérer les cours"
 // (demande de Rene du 18.09.2026, voir canManageCourses).
 export async function POST(req: NextRequest) {
-  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
   if (!admin || !canManageCourses(admin)) {
     return NextResponse.json({ error: "Non autorisé à ajouter des cours." }, { status: 403 });
   }

@@ -3,8 +3,6 @@ import { prisma } from "@/lib/db";
 import { requireTeacher } from "@/lib/auth";
 import { currentPeriod, isWithinLateWindow } from "@/lib/dates";
 import { getOrCreateDeclaration } from "@/lib/declarationBundle";
-import { sendAjbLateEntryAlert } from "@/lib/email";
-import { AdminRole } from "@prisma/client";
 
 /**
  * Changement AJB de dernière minute (entre le 20 et la fin de la période,
@@ -48,26 +46,10 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  try {
-    const recipients = await prisma.adminUser.findMany({
-      where: { active: true, role: { in: [AdminRole.COMPTABILITE, AdminRole.DIRECTION] } },
-      select: { email: true },
-    });
-    const to = recipients.map((r) => r.email).filter(Boolean);
-    await sendAjbLateEntryAlert({
-      to,
-      teacherName: teacher.name,
-      period,
-      entry: {
-        date: entry.date ? entry.date.toISOString().slice(0, 10) : null,
-        heure: entry.heure,
-        nomCours: entry.nomCours,
-        comment: entry.comment,
-      },
-    });
-  } catch (e) {
-    console.error("Échec d'envoi de l'alerte cours AJB tardif :", e);
-  }
+  // Plus d'alerte immédiate à la création : les cours AJB tardifs sont
+  // désormais regroupés dans le résumé quotidien envoyé à Comptabilité +
+  // Direction (voir sendDueLateDigest dans cronJobs.ts) — demande de Rene
+  // du 21.09.2026, pour réduire le volume d'emails.
 
   return NextResponse.json({ entry });
 }
