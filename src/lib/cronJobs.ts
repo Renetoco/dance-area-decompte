@@ -179,17 +179,24 @@ async function lockAndAutoSubmit(period: string, dateStr: string) {
   }
 
   await markRan(jobKey, `${autoSubmitted} déclaration(s) verrouillée(s) et soumise(s) automatiquement pour ${period}.`);
-  await sendSummary(period, "verrouillage", [AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  // Direction ne reçoit plus ce mail du 20 depuis le 22.09.2026 (demande de
+  // Rene : Anastasia recevait trop d'emails) — elle ne reçoit plus qu'un
+  // seul résumé automatique par période, celui du 26 (voir
+  // sendComptaFinalSummary ci-dessous).
+  await sendSummary(period, "verrouillage", [AdminRole.ADMIN, AdminRole.COMPTABILITE]);
   return { ran: true, autoSubmitted };
 }
 
 /**
  * Résumé (stats + export Excel) envoyé à un ensemble de rôles donné, avec
- * un habillage différent selon le moment — demande de Rene du 21.09.2026 :
- *   - "verrouillage" (le 20, à Admin + Comptabilité + Direction, inchangé) ;
- *   - "final" (le 26, à Comptabilité seule, une fois la fenêtre tardive
- *     terminée — recalculé à ce moment-là, donc inclut automatiquement les
- *     entrées tardives ajoutées entre le 20 et le 26) ;
+ * un habillage différent selon le moment — demande de Rene du 21.09.2026,
+ * ajustée le 22.09.2026 pour réduire encore le volume reçu par Direction :
+ *   - "verrouillage" (le 20, à Admin + Comptabilité) ;
+ *   - "final" (le 26, à Comptabilité + Direction, une fois la fenêtre
+ *     tardive terminée — recalculé à ce moment-là, donc inclut
+ *     automatiquement les entrées tardives ajoutées entre le 20 et le 26).
+ *     C'est le seul email automatique que reçoit Direction, une fois par
+ *     période ;
  *   - "secretariat" (le 30 ou dernier jour du mois, à Secrétariat seule).
  * Volontairement dans une fonction à part de son appelant (plutôt qu'un
  * échec bloquant) : un souci d'envoi ne doit jamais empêcher le reste du
@@ -252,16 +259,19 @@ async function sendSummary(period: string, kind: "verrouillage" | "final" | "sec
 }
 
 /**
- * Le 26 (fin réelle de la période, voir PERIOD_END_DAY) : résumé final à la
- * comptabilité, une fois la fenêtre tardive terminée — demande de Rene du
- * 21.09.2026 (elle garde aussi celui du 20, ci-dessus, qui reste envoyé
- * dans lockAndAutoSubmit).
+ * Le 26 (fin réelle de la période, voir PERIOD_END_DAY) : résumé final à
+ * Comptabilité + Direction, une fois la fenêtre tardive terminée — demande
+ * de Rene du 21.09.2026 (Comptabilité garde aussi celui du 20, ci-dessus,
+ * qui reste envoyé dans lockAndAutoSubmit). Depuis le 22.09.2026, Direction
+ * est passée du mail du 20 + résumé quotidien à celui-ci uniquement (un
+ * seul email automatique par période, demande de Rene suite au retour
+ * d'Anastasia sur le volume d'emails reçu).
  */
 async function sendComptaFinalSummary(period: string, dateStr: string) {
   const jobKey = `${dateStr}:compta-final`;
   if (await alreadyRan(jobKey)) return { ran: false };
-  await sendSummary(period, "final", [AdminRole.COMPTABILITE]);
-  await markRan(jobKey, `Résumé final (26) envoyé à Comptabilité pour ${period}.`);
+  await sendSummary(period, "final", [AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
+  await markRan(jobKey, `Résumé final (26) envoyé à Comptabilité + Direction pour ${period}.`);
   return { ran: true };
 }
 
@@ -284,10 +294,12 @@ async function sendSecretariatRecap(period: string, dateStr: string) {
  * Chaque jour de la fenêtre tardive (20 à 21h jusqu'au 26 inclus, voir
  * DEADLINE_DAY/PERIOD_END_DAY dans dates.ts) : un seul résumé groupant
  * toutes les entrées tardives (changements + cours AJB) signalées ce
- * jour-là, envoyé à Comptabilité ET Direction — remplace les alertes
- * immédiates par entrée qui existaient avant (demande de Rene du
- * 21.09.2026, pour réduire le volume d'emails). Rien n'est envoyé s'il n'y
- * a eu aucune entrée tardive ce jour-là.
+ * jour-là, envoyé à Comptabilité seule — remplace les alertes immédiates
+ * par entrée qui existaient avant (demande de Rene du 21.09.2026, pour
+ * réduire le volume d'emails). Direction ne reçoit plus ce résumé quotidien
+ * depuis le 22.09.2026 (elle ne reçoit plus qu'un seul email par période,
+ * voir sendComptaFinalSummary). Rien n'est envoyé s'il n'y a eu aucune
+ * entrée tardive ce jour-là.
  */
 async function sendDueLateDigest(period: string, dateStr: string, year: number, month: number, day: number) {
   const jobKey = `${dateStr}:late-digest`;
@@ -314,7 +326,7 @@ async function sendDueLateDigest(period: string, dateStr: string, year: number, 
         include: { declaration: { select: { teacher: { select: { name: true } } } } },
       }),
       prisma.adminUser.findMany({
-        where: { active: true, role: { in: [AdminRole.COMPTABILITE, AdminRole.DIRECTION] } },
+        where: { active: true, role: { in: [AdminRole.COMPTABILITE] } },
         select: { email: true },
       }),
     ]);

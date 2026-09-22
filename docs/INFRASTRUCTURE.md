@@ -1,6 +1,6 @@
 # Infrastructure — Décompte mensuel Dance Area
 
-Document de référence technique. Dernière mise à jour : 21 septembre 2026.
+Document de référence technique. Dernière mise à jour : 22 septembre 2026 (tri des colonnes de la vue d'ensemble).
 
 ## 1. Vue d'ensemble
 
@@ -151,7 +151,9 @@ Deux types de comptes, avec la même mécanique de session (cookie signé,
     annuel du planning, QR code, suppression de déclarations.
   - `COMPTABILITE` — tableau de bord des déclarations + export Excel.
   - `DIRECTION` — tableau de bord des déclarations + export Excel (même
-    accès que `COMPTABILITE`, élargi le 16.09.2026 pour Anastasia).
+    accès que `COMPTABILITE`, élargi le 16.09.2026 pour Anastasia). Ne
+    reçoit qu'un seul email automatique par période (le résumé du 26 —
+    voir section 7), depuis le 22.09.2026, à sa demande.
   - `SECRETARIAT` (ajouté le 21.09.2026) — mêmes droits et écrans que
     `COMPTABILITE` en tout point (tableau de bord, export Excel, gestion
     des cours/profs si `canManageCourses` est activé). La seule
@@ -226,10 +228,16 @@ fois le même jour :
 | Le 27 du mois (début de la période) | Crée une déclaration vierge (`DRAFT`) pour chaque prof actif |
 | Le 16 à 9h (J-4) | Envoie un rappel par email aux profs dont la déclaration du mois est encore totalement vide (aucune entrée, aucune réponse à "y a-t-il eu des changements ?") |
 | Le 20 à 9h (J-0, matin de la date limite) | Dernier rappel : envoyé à tous les profs n'ayant pas encore soumis manuellement, même avec un brouillon en cours (dernier filet avant la clôture) |
-| Le 20 à 21h (date limite) | Verrouille toutes les déclarations non soumises manuellement, les marque `SUBMITTED_AUTO`, notifie chaque prof par email, puis envoie le mail de clôture "verrouillage" (résumé + Excel) à Admin/Comptabilité/Direction |
-| Du 20 à 22h au 26 à 22h, chaque jour | Envoie à Comptabilité/Direction le résumé quotidien des entrées tardives (voir "Résumé quotidien" ci-dessous) — uniquement s'il y en a eu au moins une ce jour-là |
-| Le 26 à 23h | Envoie à Comptabilité le mail de résumé "final" (même contenu que celui du 20, recalculé pour inclure les entrées tardives 21-26) |
-| Le 30 à 9h (ou dernier jour du mois si le mois en a moins de 30, ex. février) | Envoie à Secrétariat le mail de résumé "secrétariat" (même contenu que les deux précédents) |
+| Le 20 à 21h (date limite) | Verrouille toutes les déclarations non soumises manuellement, les marque `SUBMITTED_AUTO`, notifie chaque prof par email, puis envoie le mail de clôture "verrouillage" (résumé + Excel) à Admin/Comptabilité |
+| Du 20 à 22h au 26 à 22h, chaque jour | Envoie à Comptabilité le résumé quotidien des entrées tardives (voir "Résumé quotidien" ci-dessous) — uniquement s'il y en a eu au moins une ce jour-là |
+| Le 26 à 23h | Envoie à Comptabilité + Direction le mail de résumé "final" (même contenu que celui du 20, recalculé pour inclure les entrées tardives 21-26) |
+| Le 30 à 9h (ou dernier jour du mois si le mois en a moins de 30, ex. février) | Envoie à Secrétariat le mail de résumé "secrétariat" (même contenu que les précédents) |
+
+> **Direction** ne reçoit, depuis le 22.09.2026, plus qu'**un seul email
+> automatique par période** : le résumé du 26 ci-dessus (demande de Rene,
+> suite au retour d'Anastasia comme quoi elle recevait trop d'emails). Elle
+> ne reçoit donc plus ni le mail du 20, ni le résumé quotidien des entrées
+> tardives.
 
 ### Période de paie (27 → 26) et fenêtre tardive
 
@@ -249,13 +257,14 @@ date limite de soumission (le 20) :
   verrouillée telle quelle, mais le prof peut encore signaler un
   changement de dernière minute depuis sa page — chaque ligne ajoutée dans
   ce créneau est marquée `tardif` en base (repérable dans l'export Excel,
-  colonnes "Tardif"), pour que Comptabilité/Direction décident de
-  l'inclure sur le salaire du mois courant ou de le reporter au mois
-  suivant. Depuis le 21.09.2026, ces entrées ne déclenchent plus d'alerte
-  immédiate par email : elles sont regroupées dans **un résumé envoyé une
-  fois par jour** (à 22h, s'il y a eu au moins une entrée tardive ce
-  jour-là) à `COMPTABILITE`/`DIRECTION`, pour éviter de multiplier les
-  emails — voir section 7.
+  colonnes "Tardif"), pour que Comptabilité décide de l'inclure sur le
+  salaire du mois courant ou de le reporter au mois suivant. Depuis le
+  21.09.2026, ces entrées ne déclenchent plus d'alerte immédiate par
+  email : elles sont regroupées dans **un résumé envoyé une fois par
+  jour** (à 22h, s'il y a eu au moins une entrée tardive ce jour-là) à
+  `COMPTABILITE` seule (Direction n'est plus destinataire de ce résumé
+  quotidien depuis le 22.09.2026 — voir section 7), pour éviter de
+  multiplier les emails.
 - **Après le 26** : la période est totalement close, plus aucune saisie
   n'est possible (ni normale, ni tardive).
 
@@ -299,26 +308,33 @@ Infomaniak, adresse d'expédition configurable via `MAIL_FROM`) :
 4. **Notification de soumission automatique** — après la date limite, si
    la déclaration a été verrouillée sans action du prof.
 5. **Résumé quotidien des entrées tardives** (`sendLateEntriesDailyDigest`)
-   — à `COMPTABILITE`/`DIRECTION`, une fois par jour à 22h entre la date
+   — à `COMPTABILITE` seule, une fois par jour à 22h entre la date
    limite (20) et la fin de la période (26), et seulement s'il y a eu au
    moins une entrée tardive (changement classique ou cours AJB, voir
    section 6) ce jour-là. Remplace, depuis le 21.09.2026, les deux
    anciennes alertes envoyées immédiatement à chaque déclaration
-   (demande de Rene, pour réduire le volume d'emails reçus par Direction
-   et Comptabilité).
+   (demande de Rene, pour réduire le volume d'emails). Direction en a
+   été retirée le 22.09.2026 (voir ci-dessous).
 6. **Mail de clôture** (`sendClosureSummaryEmail`, trois variantes,
    contenu identique — stats de la période + fichier Excel en pièce
    jointe — seuls le sujet, l'intro et les destinataires changent) :
-   - *verrouillage* — à Admin/Comptabilité/Direction, juste après le
-     verrouillage du 20 à 21h.
-   - *final* — à Comptabilité seule, le 26 à 23h ; mêmes chiffres que le
-     mail du 20 mais recalculés, donc incluant les éventuelles entrées
-     tardives du 21 au 26.
+   - *verrouillage* — à Admin/Comptabilité, juste après le verrouillage
+     du 20 à 21h. Direction en a été retirée le 22.09.2026 (voir
+     ci-dessous).
+   - *final* — à Comptabilité + Direction, le 26 à 23h ; mêmes chiffres
+     que le mail du 20 mais recalculés, donc incluant les éventuelles
+     entrées tardives du 21 au 26.
    - *secrétariat* — au rôle Secrétariat seul, le 30 du mois (ou le
      dernier jour du mois s'il en compte moins de 30) à 9h ; même contenu
      que les deux précédents. C'est le seul email automatique que reçoit
      Secrétariat — volontairement, pour ne pas la solliciter avec les
      rappels/alertes destinés aux profs ou à la gestion quotidienne.
+
+**Direction (22.09.2026)** : suite à un retour d'Anastasia sur le volume
+d'emails reçu, Direction est passée de "mail du 20 + résumé quotidien" à
+**un seul email automatique par période**, le résumé *final* du 26
+ci-dessus — demande de Rene. Elle ne reçoit donc plus ni le mail du 20, ni
+le résumé quotidien des entrées tardives.
 
 Les noms de profs sont échappés avant insertion dans le HTML de l'email
 (protection contre l'injection de balisage).
@@ -379,12 +395,18 @@ copié ces codes dans un gestionnaire de mots de passe — voir
 
 **Côté admin/comptabilité/direction/secrétariat** (`/admin`) :
 - Vue d'ensemble : tableau de bord filtrable (période, statut, changements,
-  recherche) de toutes les déclarations, avec un indicateur de
-  concordance (🟢/🔴/🟠/⚪) qui vérifie que les remplacements déclarés par
-  un prof correspondent à ce que l'autre prof cité a lui-même déclaré.
-  Export Excel (classeur complet ou sélection de profs cochés dans une
-  grille dédiée) pour `ADMIN`, `COMPTABILITE`, `DIRECTION` et
-  `SECRETARIAT`.
+  type de compte — prof ou musicien·ne — et recherche) de toutes les
+  déclarations, avec un indicateur de concordance (🟢/🔴/🟠/⚪) qui vérifie
+  que les remplacements déclarés par un prof correspondent à ce que
+  l'autre prof cité a lui-même déclaré. Les en-têtes de colonnes (Prof,
+  Type, Statut, Changements, Soumis le, Lignes) sont cliquables pour trier
+  le tableau — un 2e clic sur le même en-tête inverse le sens — ce qui
+  permet par exemple de regrouper les auto-soumis, de voir les soumissions
+  les plus récentes ou les plus anciennes en premier, ou de repérer les
+  déclarations avec le plus (ou le moins) de lignes de changement
+  (ajouté le 22.09.2026, demande de Rene). Export Excel (classeur complet
+  ou sélection de profs cochés dans une grille dédiée) pour `ADMIN`,
+  `COMPTABILITE`, `DIRECTION` et `SECRETARIAT`.
 - `/admin/cours` : gestion des cours (modification pour les quatre rôles ;
   ajout, désactivation/réactivation, suppression, changement de titulaire
   et gestion des participant·es supplémentaires réservés à `ADMIN` ou un

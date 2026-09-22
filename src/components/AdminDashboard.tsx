@@ -5,7 +5,13 @@ import Link from "next/link";
 
 type Role = "ADMIN" | "COMPTABILITE" | "DIRECTION" | "SECRETARIAT";
 
-type TeacherLite = { id: string; name: string; analyticCode: string; email: string | null };
+type TeacherLite = {
+  id: string;
+  name: string;
+  analyticCode: string;
+  email: string | null;
+  role: "ENSEIGNANT" | "MUSICIEN";
+};
 
 type DeclarationRow = {
   id: string;
@@ -50,6 +56,44 @@ const TYPE_LABELS: Record<string, string> = {
   AUTRE: "Autre",
 };
 
+const TEACHER_ROLE_LABELS: Record<string, string> = {
+  ENSEIGNANT: "Prof",
+  MUSICIEN: "Musicien·ne",
+};
+
+// Tri des colonnes du tableau (demande de Rene du 22.09.2026) : cliquer sur
+// un en-tête trie/regroupe toutes les déclarations affichées selon cette
+// colonne (un 2e clic inverse le sens), en plus des filtres existants
+// (période, statut, changements, recherche, type de compte) qui, eux,
+// réduisent la liste plutôt que de la réordonner.
+type SortKey = "teacher" | "type" | "status" | "hasChanges" | "submittedAt" | "items";
+type SortDir = "asc" | "desc";
+
+const STATUS_ORDER: Record<string, number> = { DRAFT: 0, SUBMITTED_MANUAL: 1, SUBMITTED_AUTO: 2 };
+const TEACHER_ROLE_ORDER: Record<string, number> = { ENSEIGNANT: 0, MUSICIEN: 1 };
+
+function compareDeclarations(a: DeclarationRow, b: DeclarationRow, key: SortKey): number {
+  const byName = () => a.teacher.name.localeCompare(b.teacher.name, "fr");
+  switch (key) {
+    case "teacher":
+      return byName();
+    case "type":
+      return (TEACHER_ROLE_ORDER[a.teacher.role] ?? 0) - (TEACHER_ROLE_ORDER[b.teacher.role] ?? 0) || byName();
+    case "status":
+      return (STATUS_ORDER[a.status] ?? 0) - (STATUS_ORDER[b.status] ?? 0) || byName();
+    case "hasChanges": {
+      const val = (d: DeclarationRow) => (d.hasChanges === null ? -1 : d.hasChanges ? 1 : 0);
+      return val(a) - val(b) || byName();
+    }
+    case "submittedAt": {
+      const time = (d: DeclarationRow) => (d.submittedAt ? new Date(d.submittedAt).getTime() : -Infinity);
+      return time(a) - time(b) || byName();
+    }
+    case "items":
+      return a.items.length - b.items.length || byName();
+  }
+}
+
 function defaultPeriod() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -60,7 +104,10 @@ export default function AdminDashboard() {
   const [period, setPeriod] = useState(defaultPeriod());
   const [status, setStatus] = useState("");
   const [hasChanges, setHasChanges] = useState("");
+  const [teacherRole, setTeacherRole] = useState("");
   const [q, setQ] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("teacher");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [declarations, setDeclarations] = useState<DeclarationRow[]>([]);
   const [missing, setMissing] = useState<TeacherLite[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -75,6 +122,7 @@ export default function AdminDashboard() {
       const params = new URLSearchParams({ period });
       if (status) params.set("status", status);
       if (hasChanges) params.set("hasChanges", hasChanges);
+      if (teacherRole) params.set("teacherRole", teacherRole);
       if (q) params.set("q", q);
       const res = await fetch(`/api/admin/declarations?${params}`);
       if (res.ok) {
@@ -87,7 +135,28 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [period, status, hasChanges, q]);
+  }, [period, status, hasChanges, teacherRole, q]);
+
+  // Tri d'affichage (voir compareDeclarations) — s'applique après les
+  // filtres ci-dessus, sur la liste déjà reçue de l'API.
+  function handleSort(key: SortKey) {
+    if (sortBy === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortDir("asc");
+    }
+  }
+
+  function sortIndicator(key: SortKey) {
+    if (sortBy !== key) return null;
+    return <span className="sort-arrow">{sortDir === "asc" ? " ▲" : " ▼"}</span>;
+  }
+
+  const sortedDeclarations = [...declarations].sort((a, b) => {
+    const cmp = compareDeclarations(a, b, sortBy);
+    return sortDir === "asc" ? cmp : -cmp;
+  });
 
   function toggleSelected(teacherId: string) {
     setSelected((prev) => {
@@ -150,6 +219,11 @@ export default function AdminDashboard() {
           <option value="">Changements ou non</option>
           <option value="true">Avec changements</option>
           <option value="false">Sans changement</option>
+        </select>
+        <select value={teacherRole} onChange={(e) => setTeacherRole(e.target.value)}>
+          <option value="">Tous les comptes</option>
+          <option value="ENSEIGNANT">Profs</option>
+          <option value="MUSICIEN">Musicien·nes</option>
         </select>
         <input placeholder="Rechercher un prof..." value={q} onChange={(e) => setQ(e.target.value)} />
         {canExport && (
@@ -251,16 +325,29 @@ export default function AdminDashboard() {
           <thead>
             <tr>
               <th></th>
-              <th>Prof</th>
+              <th className="th-sortable" onClick={() => handleSort("teacher")}>
+                Prof{sortIndicator("teacher")}
+              </th>
               <th>Code</th>
-              <th>Statut</th>
-              <th>Changements</th>
-              <th>Soumis le</th>
-              <th>Lignes</th>
+              <th className="th-sortable" onClick={() => handleSort("type")}>
+                Type{sortIndicator("type")}
+              </th>
+              <th className="th-sortable" onClick={() => handleSort("status")}>
+                Statut{sortIndicator("status")}
+              </th>
+              <th className="th-sortable" onClick={() => handleSort("hasChanges")}>
+                Changements{sortIndicator("hasChanges")}
+              </th>
+              <th className="th-sortable" onClick={() => handleSort("submittedAt")}>
+                Soumis le{sortIndicator("submittedAt")}
+              </th>
+              <th className="th-sortable" onClick={() => handleSort("items")}>
+                Lignes{sortIndicator("items")}
+              </th>
             </tr>
           </thead>
           <tbody>
-            {declarations.map((d) => (
+            {sortedDeclarations.map((d) => (
               <Fragment key={d.id}>
                 <tr className="is-clickable" onClick={() => toggleExpand(d.id)}>
                   <td>{expanded === d.id ? "▾" : "▸"}</td>
@@ -270,6 +357,7 @@ export default function AdminDashboard() {
                     </Link>
                   </td>
                   <td>{d.teacher.analyticCode}</td>
+                  <td>{TEACHER_ROLE_LABELS[d.teacher.role] ?? d.teacher.role}</td>
                   <td>
                     <span className={`badge ${STATUS_LABELS[d.status].cls}`}>{STATUS_LABELS[d.status].label}</span>
                   </td>
@@ -279,7 +367,7 @@ export default function AdminDashboard() {
                 </tr>
                 {expanded === d.id && detail && (
                   <tr className="detail-row">
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       {detail.items.length === 0 && <p className="muted">Aucune ligne de changement.</p>}
                       {detail.items.map((item: any) => (
                         <div key={item.id} className="detail-item">

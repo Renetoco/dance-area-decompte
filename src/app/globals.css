@@ -456,6 +456,23 @@ thead th {
   white-space: nowrap;
 }
 
+/* En-têtes de colonnes triables (vue d'ensemble des déclarations) —
+   demande de Rene du 22.09.2026 : cliquer trie/regroupe le tableau selon
+   cette colonne, un 2e clic inverse le sens (voir sortIndicator). */
+thead th.th-sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.12s ease;
+}
+
+thead th.th-sortable:hover {
+  color: var(--ink);
+}
+
+.sort-arrow {
+  color: var(--accent);
+}
+
 tbody td {
   text-align: left;
   padding: 11px 10px;

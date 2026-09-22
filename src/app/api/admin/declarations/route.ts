@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { currentPeriod } from "@/lib/dates";
-import { AdminRole, DeclarationStatus } from "@prisma/client";
+import { AdminRole, DeclarationStatus, TeacherRole } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const admin = await requireAdmin([AdminRole.ADMIN, AdminRole.COMPTABILITE, AdminRole.DIRECTION, AdminRole.SECRETARIAT]);
@@ -12,8 +12,19 @@ export async function GET(req: NextRequest) {
   const period = searchParams.get("period") || currentPeriod();
   const status = searchParams.get("status"); // DRAFT | SUBMITTED_MANUAL | SUBMITTED_AUTO
   const hasChanges = searchParams.get("hasChanges"); // "true" | "false"
+  const teacherRole = searchParams.get("teacherRole"); // ENSEIGNANT | MUSICIEN — demande de Rene du 22.09.2026
   const teacherId = searchParams.get("teacherId");
   const q = searchParams.get("q"); // recherche par nom de prof
+
+  const teacherFilter =
+    q || teacherRole
+      ? {
+          teacher: {
+            ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
+            ...(teacherRole ? { role: teacherRole as TeacherRole } : {}),
+          },
+        }
+      : {};
 
   const declarations = await prisma.monthlyDeclaration.findMany({
     where: {
@@ -21,10 +32,10 @@ export async function GET(req: NextRequest) {
       ...(status ? { status: status as DeclarationStatus } : {}),
       ...(hasChanges ? { hasChanges: hasChanges === "true" } : {}),
       ...(teacherId ? { teacherId } : {}),
-      ...(q ? { teacher: { name: { contains: q, mode: "insensitive" } } } : {}),
+      ...teacherFilter,
     },
     include: {
-      teacher: { select: { id: true, name: true, analyticCode: true, email: true } },
+      teacher: { select: { id: true, name: true, analyticCode: true, email: true, role: true } },
       items: true,
     },
     orderBy: { teacher: { name: "asc" } },
@@ -34,7 +45,7 @@ export async function GET(req: NextRequest) {
   // atteints par le cron du 1er, ex. compte créé en cours de mois).
   const allTeachers = await prisma.teacher.findMany({
     where: { active: true },
-    select: { id: true, name: true, analyticCode: true, email: true },
+    select: { id: true, name: true, analyticCode: true, email: true, role: true },
   });
   const declaredIds = new Set(declarations.map((d) => d.teacherId));
   const missing = allTeachers.filter((t) => !declaredIds.has(t.id));
