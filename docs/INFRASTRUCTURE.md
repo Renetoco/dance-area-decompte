@@ -1,6 +1,6 @@
 # Infrastructure — Décompte mensuel Dance Area
 
-Document de référence technique. Dernière mise à jour : 22 septembre 2026 (tri des colonnes de la vue d'ensemble).
+Document de référence technique. Dernière mise à jour : 29 septembre 2026 (Direction ne reçoit plus aucun email automatique).
 
 ## 1. Vue d'ensemble
 
@@ -152,8 +152,9 @@ Deux types de comptes, avec la même mécanique de session (cookie signé,
   - `COMPTABILITE` — tableau de bord des déclarations + export Excel.
   - `DIRECTION` — tableau de bord des déclarations + export Excel (même
     accès que `COMPTABILITE`, élargi le 16.09.2026 pour Anastasia). Ne
-    reçoit qu'un seul email automatique par période (le résumé du 26 —
-    voir section 7), depuis le 22.09.2026, à sa demande.
+    reçoit plus aucun email automatique depuis le 29.09.2026, à sa
+    demande (voir section 7) — l'accès à l'app (tableau de bord, export)
+    n'est pas concerné, seuls les emails automatisés ont été retirés.
   - `SECRETARIAT` (ajouté le 21.09.2026) — mêmes droits et écrans que
     `COMPTABILITE` en tout point (tableau de bord, export Excel, gestion
     des cours/profs si `canManageCourses` est activé). La seule
@@ -230,14 +231,16 @@ fois le même jour :
 | Le 20 à 9h (J-0, matin de la date limite) | Dernier rappel : envoyé à tous les profs n'ayant pas encore soumis manuellement, même avec un brouillon en cours (dernier filet avant la clôture) |
 | Le 20 à 21h (date limite) | Verrouille toutes les déclarations non soumises manuellement, les marque `SUBMITTED_AUTO`, notifie chaque prof par email, puis envoie le mail de clôture "verrouillage" (résumé + Excel) à Admin/Comptabilité |
 | Du 20 à 22h au 26 à 22h, chaque jour | Envoie à Comptabilité le résumé quotidien des entrées tardives (voir "Résumé quotidien" ci-dessous) — uniquement s'il y en a eu au moins une ce jour-là |
-| Le 26 à 23h | Envoie à Comptabilité + Direction le mail de résumé "final" (même contenu que celui du 20, recalculé pour inclure les entrées tardives 21-26) |
+| Le 26 à 23h | Envoie à Comptabilité le mail de résumé "final" (même contenu que celui du 20, recalculé pour inclure les entrées tardives 21-26) |
 | Le 30 à 9h (ou dernier jour du mois si le mois en a moins de 30, ex. février) | Envoie à Secrétariat le mail de résumé "secrétariat" (même contenu que les précédents) |
 
-> **Direction** ne reçoit, depuis le 22.09.2026, plus qu'**un seul email
-> automatique par période** : le résumé du 26 ci-dessus (demande de Rene,
-> suite au retour d'Anastasia comme quoi elle recevait trop d'emails). Elle
-> ne reçoit donc plus ni le mail du 20, ni le résumé quotidien des entrées
-> tardives.
+> **Direction** ne reçoit **plus aucun email automatique** depuis le
+> 29.09.2026 (demande de Rene, suite au retour d'Anastasia sur le volume
+> d'emails reçu). Elle avait déjà été retirée du mail du 20 et du résumé
+> quotidien le 22.09.2026 ; le résumé du 26 ci-dessus était le dernier
+> qu'elle recevait encore, et en a été retiré à son tour. Son accès à
+> l'application (tableau de bord, export Excel) est inchangé — seuls les
+> emails automatisés sont concernés.
 
 ### Période de paie (27 → 26) et fenêtre tardive
 
@@ -321,20 +324,23 @@ Infomaniak, adresse d'expédition configurable via `MAIL_FROM`) :
    - *verrouillage* — à Admin/Comptabilité, juste après le verrouillage
      du 20 à 21h. Direction en a été retirée le 22.09.2026 (voir
      ci-dessous).
-   - *final* — à Comptabilité + Direction, le 26 à 23h ; mêmes chiffres
-     que le mail du 20 mais recalculés, donc incluant les éventuelles
-     entrées tardives du 21 au 26.
+   - *final* — à Comptabilité seule, le 26 à 23h ; mêmes chiffres que le
+     mail du 20 mais recalculés, donc incluant les éventuelles entrées
+     tardives du 21 au 26. Direction en a été retirée le 29.09.2026 (voir
+     ci-dessous).
    - *secrétariat* — au rôle Secrétariat seul, le 30 du mois (ou le
      dernier jour du mois s'il en compte moins de 30) à 9h ; même contenu
      que les deux précédents. C'est le seul email automatique que reçoit
      Secrétariat — volontairement, pour ne pas la solliciter avec les
      rappels/alertes destinés aux profs ou à la gestion quotidienne.
 
-**Direction (22.09.2026)** : suite à un retour d'Anastasia sur le volume
-d'emails reçu, Direction est passée de "mail du 20 + résumé quotidien" à
-**un seul email automatique par période**, le résumé *final* du 26
-ci-dessus — demande de Rene. Elle ne reçoit donc plus ni le mail du 20, ni
-le résumé quotidien des entrées tardives.
+**Direction** : suite à des retours répétés d'Anastasia sur le volume
+d'emails reçu, elle a d'abord été retirée du mail du 20 et du résumé
+quotidien le 22.09.2026 (ne gardant que le résumé *final* du 26), puis du
+résumé du 26 lui-même le 29.09.2026 — demandes de Rene. Elle ne reçoit
+donc plus **aucun email automatique** de l'application. Cela ne change
+rien à son accès (tableau de bord, export Excel), seuls les envois
+automatisés sont concernés.
 
 Les noms de profs sont échappés avant insertion dans le HTML de l'email
 (protection contre l'injection de balisage).

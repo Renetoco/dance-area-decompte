@@ -190,14 +190,16 @@ async function lockAndAutoSubmit(period: string, dateStr: string) {
 /**
  * Résumé (stats + export Excel) envoyé à un ensemble de rôles donné, avec
  * un habillage différent selon le moment — demande de Rene du 21.09.2026,
- * ajustée le 22.09.2026 pour réduire encore le volume reçu par Direction :
+ * ajustée le 22.09.2026 puis le 29.09.2026 (retrait complet de Direction) :
  *   - "verrouillage" (le 20, à Admin + Comptabilité) ;
- *   - "final" (le 26, à Comptabilité + Direction, une fois la fenêtre
- *     tardive terminée — recalculé à ce moment-là, donc inclut
- *     automatiquement les entrées tardives ajoutées entre le 20 et le 26).
- *     C'est le seul email automatique que reçoit Direction, une fois par
- *     période ;
+ *   - "final" (le 26, à Comptabilité seule, une fois la fenêtre tardive
+ *     terminée — recalculé à ce moment-là, donc inclut automatiquement les
+ *     entrées tardives ajoutées entre le 20 et le 26) ;
  *   - "secretariat" (le 30 ou dernier jour du mois, à Secrétariat seule).
+ * Direction ne reçoit plus aucun de ces emails depuis le 29.09.2026 (demande
+ * de Rene suite au retour d'Anastasia sur le volume d'emails reçu — elle
+ * avait déjà été retirée du mail du 20 et du résumé quotidien le
+ * 22.09.2026 ; le résumé du 26 était le dernier qu'elle recevait encore).
  * Volontairement dans une fonction à part de son appelant (plutôt qu'un
  * échec bloquant) : un souci d'envoi ne doit jamais empêcher le reste du
  * traitement (verrouillage, etc.) de s'être bien passé.
@@ -260,18 +262,17 @@ async function sendSummary(period: string, kind: "verrouillage" | "final" | "sec
 
 /**
  * Le 26 (fin réelle de la période, voir PERIOD_END_DAY) : résumé final à
- * Comptabilité + Direction, une fois la fenêtre tardive terminée — demande
- * de Rene du 21.09.2026 (Comptabilité garde aussi celui du 20, ci-dessus,
- * qui reste envoyé dans lockAndAutoSubmit). Depuis le 22.09.2026, Direction
- * est passée du mail du 20 + résumé quotidien à celui-ci uniquement (un
- * seul email automatique par période, demande de Rene suite au retour
- * d'Anastasia sur le volume d'emails reçu).
+ * Comptabilité seule, une fois la fenêtre tardive terminée — demande de
+ * Rene du 21.09.2026 (Comptabilité garde aussi celui du 20, ci-dessus, qui
+ * reste envoyé dans lockAndAutoSubmit). Direction a été retirée de ce mail
+ * le 29.09.2026 (elle ne reçoit donc plus aucun email automatique — voir
+ * sendSummary ci-dessus).
  */
 async function sendComptaFinalSummary(period: string, dateStr: string) {
   const jobKey = `${dateStr}:compta-final`;
   if (await alreadyRan(jobKey)) return { ran: false };
-  await sendSummary(period, "final", [AdminRole.COMPTABILITE, AdminRole.DIRECTION]);
-  await markRan(jobKey, `Résumé final (26) envoyé à Comptabilité + Direction pour ${period}.`);
+  await sendSummary(period, "final", [AdminRole.COMPTABILITE]);
+  await markRan(jobKey, `Résumé final (26) envoyé à Comptabilité pour ${period}.`);
   return { ran: true };
 }
 
