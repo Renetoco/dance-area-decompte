@@ -240,6 +240,21 @@ async function sendSummary(period: string, kind: "verrouillage" | "final" | "sec
 
     const xlsxBuffer = Buffer.from(await generateXlsxForPeriod(period));
 
+    // Archive le classeur tel qu'il est envoyé maintenant (voir
+    // MonthlyReport dans schema.prisma) — demande de Rene du 08.10.2026,
+    // pour pouvoir le retélécharger plus tard depuis /admin/rapports sans
+    // recalcul : regénérer "verrouillage" après coup donnerait les
+    // chiffres du 26 (entrées tardives 21-26 déjà en base), pas ce qui a
+    // réellement été envoyé le 20. Uniquement pour verrouillage/final —
+    // "secretariat" n'a pas été demandé pour l'archive.
+    if (kind === "verrouillage" || kind === "final") {
+      await prisma.monthlyReport.upsert({
+        where: { period_kind: { period, kind } },
+        update: { fileData: xlsxBuffer, generatedAt: new Date() },
+        create: { period, kind, fileData: xlsxBuffer },
+      });
+    }
+
     await sendClosureSummaryEmail({
       to,
       period,
@@ -392,7 +407,8 @@ export async function runDailyCronTick(now: Date = new Date()) {
 
   // Fenêtre tardive : du 20 (après le verrouillage) au 26 inclus (fin
   // réelle de la période, voir PERIOD_END_DAY) — résumé quotidien groupé à
-  // Comptabilité + Direction, seulement s'il y a eu au moins une entrée.
+  // Comptabilité seule (Direction retirée le 22.09.2026), seulement s'il y
+  // a eu au moins une entrée.
   if (day >= DEADLINE_DAY && day <= PERIOD_END_DAY && hour >= LATE_DIGEST_HOUR) {
     results.lateDigest = await sendDueLateDigest(period, dateStr, year, month, day);
   }

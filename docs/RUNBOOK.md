@@ -25,6 +25,39 @@ l'une l'autre au moment du push — c'est déjà arrivé une fois (voir
 vérifier qu'on part bien de la dernière version : `git fetch origin` puis
 `git log origin/main` pour comparer avec ce qu'on a en local.
 
+### Déploiement avec migration de base de données
+
+Certaines livraisons ajoutent un fichier dans `prisma/migrations/` (une
+modification de la structure de la base — nouvelle colonne, nouvelle
+valeur de rôle, etc.). Cette migration doit être appliquée à la base
+Neon de production, sinon le nouveau code peut planter en cherchant une
+colonne/valeur qui n'existe pas encore en base.
+
+**Configuration recommandée (à faire une seule fois) : appliquer les
+migrations automatiquement à chaque déploiement Vercel**, pour ne plus
+jamais avoir à s'en souvenir manuellement :
+
+1. Vercel → le projet `dance-area-decompte` → **Settings** → **Build and
+   Deployment**.
+2. Section **Build Command** : décocher "Inherited from Framework
+   Preset" (ou cliquer sur "Override"), puis saisir :
+   ```
+   npx prisma migrate deploy && npm run build
+   ```
+3. Enregistrer.
+
+À partir de là, chaque déploiement Vercel applique d'abord les
+migrations en attente sur la base de production (avec la variable
+`DATABASE_URL` déjà configurée dans Vercel), puis construit
+l'application — sans commande à taper depuis un ordinateur personnel.
+Si une migration a déjà été appliquée précédemment, `prisma migrate
+deploy` ne fait rien (pas d'erreur, pas de doublon) : cette commande
+peut rester en place en permanence, y compris les mois sans migration.
+
+Si le build échoue juste après ce changement, regarder les logs Vercel :
+un message mentionnant `prisma migrate deploy` indique un souci de
+migration (à distinguer d'une erreur de compilation classique).
+
 ## Réactiver un compte désactivé (prof ou admin)
 
 1. Se connecter en tant qu'`ADMIN`.
@@ -57,9 +90,14 @@ vérifier qu'on part bien de la dernière version : `git fetch origin` puis
 
 Tout se fait depuis `/admin/administration` (réservé au rôle `ADMIN`) :
 
-- **Comptes admin/comptabilité/direction** : formulaire d'ajout en haut de
-  la section "Comptes comptabilité / direction / administrateur". Un
-  email avec mot de passe temporaire est envoyé automatiquement.
+- **Comptes admin/comptabilité/direction/secrétariat** : formulaire
+  d'ajout en haut de la section "Comptes comptabilité / direction /
+  administrateur". Un email avec mot de passe temporaire est envoyé
+  automatiquement. Un compte Comptabilité ou Secrétariat peut être
+  basculé de l'un à l'autre à tout moment via un sélecteur sur sa ligne
+  (droits identiques, seul le calendrier d'emails automatiques change —
+  voir `INFRASTRUCTURE.md` section 7) ; Admin et Direction ne sont
+  volontairement pas basculables.
 - **Profs** : ajout individuel, ou import du planning annuel (voir
   ci-dessous) qui crée les profs sans compte actif ("dans le
   trombinoscope") — il faut ensuite renseigner leur email un par un pour
@@ -78,6 +116,18 @@ le fichier Excel source. Chaque prof est identifié par son
 `analyticCode` (le "code analytique" de l'Excel) : si ce code existe
 déjà, le cours/prof est mis à jour ; sinon, un nouveau prof est créé sans
 compte actif (email à renseigner ensuite).
+
+## Retrouver un rapport Excel d'un mois passé
+
+`/admin/rapports` (ouvert à tous les comptes backend) : une ligne par
+mois, avec un lien de téléchargement pour le rapport du verrouillage (le
+20) et un pour le résumé final (le 26). Ce sont des instantanés archivés
+au moment de l'envoi — pas un recalcul à la demande comme le bouton
+"Exporter tout" de la vue d'ensemble, qui lui donne toujours l'état actuel
+des données. Un mois n'apparaît avec un lien que si le cron a bien tourné
+ce jour-là (voir "Vérifier que le cron tourne correctement" ci-dessous) ;
+avant le 08.10.2026 (date d'ajout de cette archive), aucun rapport n'a été
+sauvegardé, donc rien n'apparaît pour les mois antérieurs.
 
 ## Vérifier que le cron tourne correctement
 

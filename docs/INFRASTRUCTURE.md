@@ -1,6 +1,6 @@
 # Infrastructure — Décompte mensuel Dance Area
 
-Document de référence technique. Dernière mise à jour : 29 septembre 2026 (Direction ne reçoit plus aucun email automatique).
+Document de référence technique. Dernière mise à jour : 8 octobre 2026 (archive des rapports Excel, `/admin/rapports` ; totaux du classeur Excel sous forme de formules).
 
 ## 1. Vue d'ensemble
 
@@ -123,6 +123,14 @@ Hébergée chez **Neon** (PostgreSQL serverless). Le schéma est défini dans
   même action le même jour, même s'il est déclenché plusieurs fois.
 - **RateLimit** — compteur de tentatives (login, mot de passe oublié) pour
   la protection anti-brute-force (voir Sécurité).
+- **MonthlyReport** — archive des rapports Excel envoyés automatiquement
+  (verrouillage du 20, résumé final du 26 — voir sections 6 et 7) —
+  demande de Rene du 08.10.2026. Avant cette table, le classeur n'existait
+  qu'en pièce jointe de l'email, sans trace dans l'app. `fileData`
+  contient le classeur binaire tel qu'envoyé à ce moment précis (un
+  instantané, pas un recalcul) ; consultable et téléchargeable depuis
+  `/admin/rapports` par tous les comptes backend. Rien n'est archivé pour
+  le résumé "secretariat" (non demandé).
 - **AdminActionLog** — journal des actions structurelles backend (cours,
   profs, musicien·nes, comptes) — demande de Rene du 18.09.2026, pour
   pouvoir tracer qui a modifié quoi et corriger en cas d'erreur, maintenant
@@ -334,6 +342,13 @@ Infomaniak, adresse d'expédition configurable via `MAIL_FROM`) :
      Secrétariat — volontairement, pour ne pas la solliciter avec les
      rappels/alertes destinés aux profs ou à la gestion quotidienne.
 
+   Le fichier Excel joint aux variantes *verrouillage* et *final* est
+   aussi archivé en base (`MonthlyReport`, voir section 4) et reste
+   consultable depuis `/admin/rapports` par tous les comptes backend,
+   même longtemps après que l'email a été reçu ou supprimé de la boîte
+   mail — demande de Rene du 08.10.2026. Pas pour *secretariat*, non
+   demandé.
+
 **Direction** : suite à des retours répétés d'Anastasia sur le volume
 d'emails reçu, elle a d'abord été retirée du mail du 20 et du résumé
 quotidien le 22.09.2026 (ne gardant que le résumé *final* du 26), puis du
@@ -412,7 +427,14 @@ copié ces codes dans un gestionnaire de mots de passe — voir
   déclarations avec le plus (ou le moins) de lignes de changement
   (ajouté le 22.09.2026, demande de Rene). Export Excel (classeur complet
   ou sélection de profs cochés dans une grille dédiée) pour `ADMIN`,
-  `COMPTABILITE`, `DIRECTION` et `SECRETARIAT`.
+  `COMPTABILITE`, `DIRECTION` et `SECRETARIAT`. Les totaux du classeur
+  généré (onglet "Résumé" et onglet de chaque prof) sont des formules
+  Excel, pas des nombres figés (ajouté le 08.10.2026, demande des
+  collègues de Rene) : si quelqu'un corrige une case "Impact" à la main
+  dans l'onglet d'un prof, le total de cet onglet et la ligne
+  correspondante du Résumé se recalculent automatiquement — voir le
+  docblock de `generateXlsxForPeriod` dans `src/lib/xlsxExport.ts` pour le
+  détail exact des formules.
 - `/admin/cours` : gestion des cours (modification pour les quatre rôles ;
   ajout, désactivation/réactivation, suppression, changement de titulaire
   et gestion des participant·es supplémentaires réservés à `ADMIN` ou un
@@ -431,6 +453,11 @@ copié ces codes dans un gestionnaire de mots de passe — voir
   que `/admin/cours/[id]`, donc les deux vues restent toujours cohérentes
   entre elles), historique complet de ses déclarations (avec bouton
   "Effacer" pour une déclaration de test ou une erreur de saisie).
+- `/admin/rapports` (ouvert aux quatre rôles — ajouté le 08.10.2026,
+  demande de Rene) : liste des rapports Excel archivés automatiquement,
+  un par période, avec un lien de téléchargement pour le verrouillage du
+  20 et un pour le résumé final du 26 (voir `MonthlyReport` en section 4
+  et section 7) — tels qu'envoyés à ce moment-là, pas recalculés.
 - `/admin/administration` (réservé au rôle `ADMIN`) : QR code d'accès à
   imprimer, import annuel du planning, gestion des comptes admin/
   comptabilité/direction/secrétariat (rôle — avec bascule

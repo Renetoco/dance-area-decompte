@@ -253,6 +253,30 @@ model CronRun {
   summary   String?
 }
 
+// Archive des rapports Excel envoyés automatiquement — demande de Rene du
+// 08.10.2026 : avant cette table, le classeur Excel du mail de clôture
+// (verrouillage du 20, résumé final du 26 — voir sendSummary dans
+// cronJobs.ts) était généré à la volée pour l'email puis jeté, sans trace
+// nulle part dans l'app. Chaque envoi sauvegarde maintenant ici son
+// classeur tel qu'il a été envoyé à ce moment précis (un "instantané"),
+// consultable depuis /admin/rapports par tous les comptes backend
+// (ADMIN/COMPTABILITE/DIRECTION/SECRETARIAT, même accès que le bouton
+// Export de la vue d'ensemble). Volontairement un instantané figé plutôt
+// qu'un recalcul à la demande : regénérer aujourd'hui le rapport "du 20"
+// d'une période déjà close donnerait les chiffres du 26 (toutes les
+// entrées tardives 21-26 déjà ajoutées en base), pas ce qui avait
+// réellement été envoyé ce jour-là.
+model MonthlyReport {
+  id           String   @id @default(cuid())
+  period       String // "2026-09"
+  kind         String // "verrouillage" (le 20) | "final" (le 26)
+  fileData     Bytes // classeur .xlsx tel qu'envoyé, identique à la pièce jointe de l'email
+  generatedAt  DateTime @default(now())
+
+  @@unique([period, kind])
+  @@index([period])
+}
+
 // Journal des actions structurelles faites depuis le backend (cours, profs,
 // musicien·nes, comptes) — demande de Rene du 18.09.2026 : depuis que la
 // gestion des cours/profs est ouverte à plus de comptes (voir

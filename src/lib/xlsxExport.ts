@@ -52,11 +52,26 @@ function safeSheetName(name: string, used: Set<string>): string {
  * Si `teacherIds` est fourni, seuls ces profs sont inclus (export d'une
  * sélection) — sinon tous les profs actifs (export complet).
  *
+ * Formules Excel (demande de Rene du 08.10.2026, relayée par ses
+ * collègues) : les totaux de chaque onglet prof (Cours prévus, Ajustements
+ * déclarés, Cours AJB, Total cours du mois) sont des formules Excel
+ * (COUNTA/SUM sur les lignes du calendrier au-dessus), et les colonnes
+ * "Cours prévus (base)" / "Ajustements déclarés" / "Total cours du mois" du
+ * Résumé pointent vers ces mêmes cellules (référence inter-onglets). Ainsi,
+ * si quelqu'un corrige une valeur "Impact" à la main dans l'onglet d'un
+ * prof (ou directement le total du Résumé pour "Cours AJB"), le total de
+ * cet onglet ET la ligne correspondante du Résumé se recalculent tout
+ * seuls, comme dans un tableur normal — au lieu de rester des nombres figés
+ * calculés une fois pour toutes côté serveur.
+ *
  * Toutes les valeurs libres saisies par les profs (commentaire, nom de
- * remplaçant·e en texte libre) sont écrites comme simples valeurs de
- * cellule "string" — jamais comme formule — donc pas de risque d'injection
- * de formule Excel (contrairement à un export CSV brut, voir
- * SECURITY-REVIEW.md #4, qui ne s'applique pas ici).
+ * remplaçant·e en texte libre) restent écrites comme simples valeurs de
+ * cellule "string" — JAMAIS comme formule, et jamais interpolées dans une
+ * formule — donc pas de risque d'injection de formule Excel (contrairement
+ * à un export CSV brut, voir SECURITY-REVIEW.md #4, qui ne s'applique pas
+ * ici). Seules des valeurs numériques déjà calculées côté serveur (deltas,
+ * compteurs) et des références de cellules/onglets construites par ce
+ * fichier entrent dans une formule.
  */
 export async function generateXlsxForPeriod(period: string, teacherIds?: string[]): Promise<ExcelJS.Buffer> {
   const rows = await computePayrollForPeriod(period, teacherIds);
@@ -65,18 +80,41 @@ export async function generateXlsxForPeriod(period: string, teacherIds?: string[
   workbook.created = new Date();
   workbook.title = `Décompte Dance Area — ${formatPeriodLabel(period)}`;
 
-  buildResumeSheet(workbook, rows);
+  // Onglet réservé en premier (pour rester le premier du classeur), rempli
+  // après la construction des onglets profs ci-dessous : ses cellules de
+  // totaux sont des formules qui pointent vers le total de l'onglet du
+  // prof concerné (voir fillResumeSheet).
+  const resume = buildResumeSheet(workbook);
+
   buildAVerifierSheet(workbook, rows, period);
 
   const usedNames = new Set<string>();
+  const teacherSheetTotals = new Map<string, TeacherSheetTotals>();
   for (const r of rows) {
-    buildTeacherSheet(workbook, r, period, safeSheetName(r.teacherName, usedNames));
+    const sheetName = safeSheetName(r.teacherName, usedNames);
+    teacherSheetTotals.set(r.teacherId, buildTeacherSheet(workbook, r, period, sheetName));
   }
+
+  fillResumeSheet(resume, rows, teacherSheetTotals);
 
   return (await workbook.xlsx.writeBuffer()) as ExcelJS.Buffer;
 }
 
-function buildResumeSheet(workbook: ExcelJS.Workbook, rows: PayrollTeacherRow[]) {
+/** Position, dans l'onglet d'un prof, des lignes de total (colonne F) — pour que le Résumé puisse y pointer. */
+type TeacherSheetTotals = {
+  sheetName: string;
+  totalPrevuRow: number;
+  totalAjustRow: number;
+  totalAjbRow: number | null; // null si le prof n'est pas marqué "AJB"
+  totalRow: number;
+};
+
+/** Référence inter-onglets Excel, avec le nom d'onglet correctement échappé (apostrophes doublées). */
+function sheetRef(sheetName: string, cell: string): string {
+  return `'${sheetName.replace(/'/g, "''")}'!${cell}`;
+}
+
+function buildResumeSheet(workbook: ExcelJS.Workbook): ExcelJS.Worksheet {
   const resume = workbook.addWorksheet("Résumé");
   resume.columns = [
     { header: "Code analytique", key: "code", width: 14 },
@@ -95,15 +133,43 @@ function buildResumeSheet(workbook: ExcelJS.Workbook, rows: PayrollTeacherRow[])
   ];
   resume.getRow(1).font = HEADER_FONT;
   resume.autoFilter = { from: "A1", to: "M1" };
+  return resume;
+}
 
+/**
+ * Remplit le Résumé une fois tous les onglets profs construits. "Cours
+ * prévus (base)" et "Ajustements déclarés" sont des formules qui pointent
+ * vers le total de l'onglet du prof (voir TeacherSheetTotals) — une
+ * correction manuelle faite directement dans l'onglet d'un prof se
+ * répercute donc aussi ici. "Total cours du mois" est une formule locale
+ * (= Cours prévus + Ajustements + Cours AJB), pour rester cohérente même si
+ * quelqu'un corrige "Cours AJB (mois)" à la main directement sur cette
+ * ligne du Résumé.
+ *
+ * "Cours AJB (mois)" reste une valeur statique (pas une formule) : c'est le
+ * seul endroit où "Non rempli" (texte, saisie AJB pas encore faite) doit
+ * rester distinct de 0 (saisie faite, 0 cours) — demande de Rene du
+ * 18.09.2026 — ce que la cellule miroir de l'onglet prof ne peut pas
+ * représenter (elle affiche toujours un nombre). La formule du total gère
+ * ce cas via IF(ISNUMBER(...)) : "Non rempli" compte comme 0, exactement
+ * comme le calcul serveur (voir payroll.ts, ajbTotal = ajbCourseCount ?? 0).
+ */
+function fillResumeSheet(resume: ExcelJS.Worksheet, rows: PayrollTeacherRow[], teacherSheetTotals: Map<string, TeacherSheetTotals>) {
   for (const r of rows) {
+    const t = teacherSheetTotals.get(r.teacherId);
+    const prevus = t ? { formula: sheetRef(t.sheetName, `F${t.totalPrevuRow}`) } : r.coursesPrevus;
+    const ajustements = t ? { formula: sheetRef(t.sheetName, `F${t.totalAjustRow}`) } : r.totalAjustementsCours;
+
+    const rowNumber = resume.rowCount + 1;
+    const total = { formula: `D${rowNumber}+E${rowNumber}+IF(ISNUMBER(K${rowNumber}),K${rowNumber},0)` };
+
     resume.addRow({
       code: r.analyticCode,
       nom: r.teacherName,
       role: ROLE_LABELS[r.role] ?? r.role,
-      prevus: r.coursesPrevus,
-      ajustements: r.totalAjustementsCours,
-      total: r.totalFinal,
+      prevus,
+      ajustements,
+      total,
       sansJour: r.coursesSansJourFixe || "",
       aVerifier: r.aVerifierCount || "",
       // "Oui" = déclaration avec changements saisis ; "Non" = envoyée
@@ -188,7 +254,12 @@ const TEACHER_SHEET_HEADERS = [
   "Commentaire",
 ];
 
-function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, period: string, sheetName: string) {
+function buildTeacherSheet(
+  workbook: ExcelJS.Workbook,
+  r: PayrollTeacherRow,
+  period: string,
+  sheetName: string
+): TeacherSheetTotals {
   const sheet = workbook.addWorksheet(sheetName);
   TEACHER_SHEET_WIDTHS.forEach((w, i) => {
     sheet.getColumn(i + 1).width = w;
@@ -214,6 +285,10 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
   sheet.autoFilter = { from: { row: headerRow.number, column: 1 }, to: { row: headerRow.number, column: 10 } };
 
   // --- Calendrier prévisionnel : une ligne par séance attendue du mois ---
+  // Colonne F (Impact) de ce bloc : référencée par la formule "Cours
+  // prévus" (COUNTA sur la colonne Date) et par "Ajustements déclarés"
+  // (SUM sur ce bloc + le bloc "hors planning" ci-dessous).
+  const occFirstRow = headerRow.number + 1;
   for (const occ of r.occurrences) {
     const a = occ.adjustment;
     sheet.addRow([
@@ -232,13 +307,16 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
   if (r.occurrences.length === 0) {
     sheet.addRow(["—", "", "Aucun cours à jour fixe rattaché ce mois-ci.", "", "", "", "", "", "", ""]);
   }
+  const occLastRow = occFirstRow + Math.max(r.occurrences.length, 1) - 1;
 
   // --- Ajustements hors planning propre (remplacement d'un·e collègue, "Autre" sans cours, anomalie de date) ---
+  let extraLastRow: number | null = null;
   if (r.extraAdjustments.length > 0) {
     sheet.addRow([]);
     const sectionRow = sheet.addRow(["Autres changements déclarés (hors planning propre de ce prof)"]);
     sheet.mergeCells(sectionRow.number, 1, sectionRow.number, 10);
     sectionRow.font = { bold: true };
+    const extraFirstRow = sectionRow.number + 1;
     for (const a of r.extraAdjustments) {
       sheet.addRow([
         a.date ?? "",
@@ -253,9 +331,17 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
         a.comment ?? "",
       ]);
     }
+    extraLastRow = extraFirstRow + r.extraAdjustments.length - 1;
   }
 
   // --- Cours AJB (saisis à la main, ne figurent pas dans le calendrier ci-dessus) ---
+  // Les lignes d'entrée tardive AJB (colonne F = 1 chacune) sont référencées
+  // par la formule "Cours AJB (mois)" ci-dessous ; la part "déclarée avant
+  // la deadline" (r.ajbCourseCount) n'a pas de ligne propre dans cet onglet
+  // (saisie sous forme de compteur, pas de liste) donc reste un nombre
+  // littéral dans la formule du total.
+  let ajbFirstRow: number | null = null;
+  let ajbLastRow: number | null = null;
   if (r.isAjbTeacher) {
     sheet.addRow([]);
     const ajbSectionRow = sheet.addRow([
@@ -268,6 +354,7 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
       sheet.mergeCells(note.number, 1, note.number, 10);
       note.font = { italic: true, color: { argb: "FF555555" } };
     } else {
+      ajbFirstRow = ajbSectionRow.number + 1;
       for (const e of r.ajbLateEntries) {
         sheet.addRow([
           e.date ?? "",
@@ -282,6 +369,7 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
           e.comment ?? "",
         ]);
       }
+      ajbLastRow = ajbFirstRow + r.ajbLateEntries.length - 1;
     }
   }
 
@@ -295,16 +383,64 @@ function buildTeacherSheet(workbook: ExcelJS.Workbook, r: PayrollTeacherRow, per
     note.font = { italic: true, color: { argb: "FF8A6D00" } };
   }
 
-  // --- Total ---
+  // --- Total : formules Excel plutôt que des nombres figés, pour qu'une
+  // correction manuelle d'une case "Impact" ci-dessus (ou ajoutée/retirée)
+  // se répercute automatiquement ici — demande de Rene du 08.10.2026. ---
   sheet.addRow([]);
-  const totalPrevuRow = sheet.addRow(["Cours prévus (base)", "", "", "", "", r.coursesPrevus]);
+
+  // "Cours prévus (base)" = nombre de séances du calendrier ci-dessus. Pas
+  // de formule quand il n'y a aucune occurrence : la ligne-espace "Aucun
+  // cours à jour fixe..." n'est pas une vraie ligne de calendrier (COUNTA
+  // la compterait à tort comme 1).
+  const totalPrevuRow = sheet.addRow([
+    "Cours prévus (base)",
+    "",
+    "",
+    "",
+    "",
+    r.occurrences.length > 0 ? { formula: `COUNTA(A${occFirstRow}:A${occLastRow})` } : 0,
+  ]);
   totalPrevuRow.font = { bold: true };
-  const totalAjustRow = sheet.addRow(["Ajustements déclarés", "", "", "", "", r.totalAjustementsCours]);
+
+  // "Ajustements déclarés" = somme des Impact du calendrier + du bloc "hors
+  // planning" (les deux blocs sont contigus ; les lignes vides/titres
+  // entre eux n'ont rien en colonne F donc SUM les ignore sans fausser le
+  // total).
+  const totalAjustRow = sheet.addRow([
+    "Ajustements déclarés",
+    "",
+    "",
+    "",
+    "",
+    { formula: `SUM(F${occFirstRow}:F${extraLastRow ?? occLastRow})` },
+  ]);
   totalAjustRow.font = { bold: true };
+
+  let totalAjbRowNumber: number | null = null;
   if (r.isAjbTeacher) {
-    const totalAjbRow = sheet.addRow(["Cours AJB (mois)", "", "", "", "", (r.ajbCourseCount ?? 0) + r.ajbLateEntries.length]);
+    const base = r.ajbCourseCount ?? 0;
+    const totalAjbRow = sheet.addRow([
+      "Cours AJB (mois)",
+      "",
+      "",
+      "",
+      "",
+      ajbFirstRow !== null && ajbLastRow !== null ? { formula: `${base}+SUM(F${ajbFirstRow}:F${ajbLastRow})` } : base,
+    ]);
     totalAjbRow.font = { bold: true };
+    totalAjbRowNumber = totalAjbRow.number;
   }
-  const totalRow = sheet.addRow(["Total cours du mois", "", "", "", "", r.totalFinal]);
+
+  const totalParts = [`F${totalPrevuRow.number}`, `F${totalAjustRow.number}`];
+  if (totalAjbRowNumber !== null) totalParts.push(`F${totalAjbRowNumber}`);
+  const totalRow = sheet.addRow(["Total cours du mois", "", "", "", "", { formula: totalParts.join("+") }]);
   totalRow.font = { bold: true, size: 12 };
+
+  return {
+    sheetName,
+    totalPrevuRow: totalPrevuRow.number,
+    totalAjustRow: totalAjustRow.number,
+    totalAjbRow: totalAjbRowNumber,
+    totalRow: totalRow.number,
+  };
 }
